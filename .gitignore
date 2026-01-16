@@ -1,0 +1,79 @@
+# =========================
+# Node / Package managers
+# =========================
+node_modules
+.pnpm-store
+.npmrc.local
+.yarn-error.log*
+npm-debug.log*
+pnpm-debug.log*
+
+# =========================
+# Next.js
+# =========================
+.next
+out
+.vercel
+.next/cache
+
+# =========================
+# TypeScript
+# =========================
+*.tsbuildinfo
+
+# =========================
+# Environment variables
+# =========================
+.env
+.env.*
+!.env.example
+
+# =========================
+# Logs
+# =========================
+logs
+*.log
+
+# =========================
+# OS / Editor
+# =========================
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+
+# =========================
+# Build / Dist
+# =========================
+dist
+build
+coverage
+
+# =========================
+# Docker
+# =========================
+docker-data
+docker-volumes
+**/data
+**/volumes
+
+# =========================
+# Wiki.js
+# =========================
+wiki/storage
+wiki/uploads
+wiki/cache
+
+# =========================
+# Lint / Formatter cache
+# =========================
+.eslintcache
+.prettiercache
+
+# =========================
+# Temporary files
+# =========================
+*.swp
+*.tmp
+*.temp

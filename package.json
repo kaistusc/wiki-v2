@@ -1,0 +1,16 @@
+{
+  "private": true,
+  "scripts": {
+    "lint": "pnpm --filter frontend run lint"
+  },
+  "lint-staged": {
+    "frontend/**/*.{ts,tsx,js,jsx}": [
+      "pnpm --filter frontend exec prettier --write",
+      "pnpm --filter frontend exec eslint --fix"
+    ],
+    "frontend/**/*.{json,md,css}": [
+      "pnpm --filter frontend exec prettier --write"
+    ]
+  },
+  "packageManager": "pnpm@10.26.1+sha512.664074abc367d2c9324fdc18037097ce0a8f126034160f709928e9e9f95d98714347044e5c3164d65bd5da6c59c6be362b107546292a8eecb7999196e5ce58fa"
+}
