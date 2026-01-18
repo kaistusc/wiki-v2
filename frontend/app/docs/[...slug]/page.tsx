@@ -2,6 +2,7 @@ import { getWikiPage } from '@/lib/wiki';
 import { titleFromSlug } from '@/lib/parseMarkdown';
 
 import ClientEditor from './ClientEditor';
+import NewPageEditor from './NewPageEditor';
 
 export default async function DocsPage({ params }: { params: Promise<{ slug?: string[] }> }) {
   const { slug } = await params;
@@ -9,10 +10,12 @@ export default async function DocsPage({ params }: { params: Promise<{ slug?: st
   const title = titleFromSlug(safeSlug[safeSlug.length - 1]);
   const rawPath = safeSlug.join('/');
   const path = decodeURIComponent(rawPath);
-  console.log('Doc page path:', path);
-
   const page = await getWikiPage(path);
-  console.log(page);
+  const temp = safeSlug[safeSlug.length - 1];
+
+  if (temp === '_new') {
+    return <NewPageEditor />;
+  }
   if (!page) return <div>Not Found</div>;
 
   return <ClientEditor page={page} title={title} />;

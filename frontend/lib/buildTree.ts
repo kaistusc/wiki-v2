@@ -40,3 +40,7 @@ export function buildTree(pages: { path: string; title: string }[]): NavNode {
 
   return root;
 }
+
+export function rewriteChildPath(oldParent: string, newParent: string, childPath: string) {
+  return newParent + childPath.slice(oldParent.length);
+}

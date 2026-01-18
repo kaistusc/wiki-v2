@@ -1,5 +1,7 @@
 'use server';
 
+import { rewriteChildPath } from './buildTree';
+
 const API = process.env.WIKI_API!;
 const TOKEN = process.env.WIKI_TOKEN!;
 
@@ -14,13 +16,10 @@ async function gql(query: string, variables?: any) {
     cache: 'no-store',
   });
 
-  console.log(res);
-
   return res.json();
 }
 
 export async function getWikiPage(path: string, locale = 'en') {
-  console.log('Fetching wiki page:', path, locale);
   const data = await gql(
     `
     query ($path: String!, $locale: String!) {
@@ -36,7 +35,6 @@ export async function getWikiPage(path: string, locale = 'en') {
     `,
     { path, locale }
   );
-  console.log(data);
   return data.data.pages.singleByPath;
 }
 
@@ -185,5 +183,69 @@ export async function createWikiPage(title: string, path: string, content: strin
       editor: 'markdown',
       isPrivate: false,
     }
+  );
+}
+
+export async function listPages() {
+  return gql(
+    `
+    query ($locale: String!) {
+      pages {
+        list(locale: $locale) {
+          id
+          path
+          title
+        }
+      }
+    }
+    `,
+    { locale: 'en' }
+  );
+}
+
+export async function updatePageAndChildren(
+  pageId: number,
+  oldPath: string,
+  newPath: string,
+  title: string,
+  content: string
+) {
+  if (oldPath === newPath) {
+    await updateWikiPageWithPath(pageId, title, content, newPath);
+    return;
+  }
+  await updateWikiPageWithPath(pageId, title, content, newPath);
+
+  const listRes = await listPages();
+  const pages = listRes?.data?.pages?.list ?? [];
+
+  const children = pages.filter((p: any) => p.path.startsWith(oldPath + '/'));
+
+  for (const child of children) {
+    const pageRes = await getPageContentById(child.id);
+    const childPage = pageRes?.data?.pages?.single;
+
+    if (!childPage) continue;
+
+    const newChildPath = newPath + child.path.slice(oldPath.length);
+
+    await updateWikiPageWithPath(child.id, childPage.title, childPage.content, newChildPath);
+  }
+}
+
+export async function getPageContentById(id: number) {
+  return gql(
+    `
+    query ($id: Int!) {
+      pages {
+        single(id: $id) {
+          id
+          title
+          content
+        }
+      }
+    }
+    `,
+    { id }
   );
 }

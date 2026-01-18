@@ -23,3 +23,9 @@ export function slugify(title: string) {
 export function titleFromSlug(slug: string) {
   return decodeURIComponent(slug).split('-').join(' ');
 }
+
+export function decodeSlug(slug: string[] | string | undefined): string[] {
+  if (!slug) return [];
+  const arr = Array.isArray(slug) ? slug : [slug];
+  return arr.map((s) => decodeURIComponent(s));
+}

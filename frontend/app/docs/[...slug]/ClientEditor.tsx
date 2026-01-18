@@ -1,17 +1,21 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 
-import { updateWikiPageWithPath } from '@/lib/wiki';
+import { updatePageAndChildren, updateWikiPageWithPath } from '@/lib/wiki';
 import MarkdownEditor from '@/components/WikiEditor';
-import { parseMarkdown, slugify } from '@/lib/parseMarkdown';
+import { decodeSlug, parseMarkdown, slugify } from '@/lib/parseMarkdown';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 function ClientPage({ page, title }: { page: any; title: string }) {
   const [editing, setEditing] = useState(false);
   const [markdown, setMarkdown] = useState(page.content);
   const router = useRouter();
+  const params = useParams();
+
+  const slug = (params.slug ?? []) as string[];
+  const currentPath = slug.join('/');
 
   if (editing) {
     return (
@@ -21,15 +25,18 @@ function ClientPage({ page, title }: { page: any; title: string }) {
           onClick={() => {
             void (async () => {
               const { title, body } = parseMarkdown(markdown);
-              console.log('Updating page with title:', title);
-              const newSlug = slugify(title);
-              console.log('New slug:', newSlug);
-              const res = await updateWikiPageWithPath(page.id, title, body, newSlug);
 
-              if (res?.data?.pages?.update?.responseResult?.succeeded) {
-                window.location.reload();
-                window.location.href = `/docs/${newSlug}`;
-              }
+              const decodedSlug = decodeSlug(slug);
+              const oldPath = decodedSlug.join('/');
+
+              const parentPath = decodedSlug.length > 1 ? decodedSlug.slice(0, -1).join('/') : '';
+
+              const newSlug = slugify(title);
+              const newPath = parentPath ? `${parentPath}/${newSlug}` : newSlug;
+
+              await updatePageAndChildren(page.id, oldPath, newPath, title, body);
+
+              window.location.href = `/docs/${newPath}`;
             })();
           }}
         >
@@ -43,6 +50,13 @@ function ClientPage({ page, title }: { page: any; title: string }) {
     <main>
       <h1>{title}</h1>
       <button onClick={() => setEditing(true)}>수정</button>
+      <button
+        onClick={() => {
+          router.push(`/docs/${currentPath}/_new`);
+        }}
+      >
+        하위 페이지 생성
+      </button>
       <article dangerouslySetInnerHTML={{ __html: page.render }} />
     </main>
   );
