@@ -21,8 +21,8 @@ export default function ClientPage() {
       console.log(res);
 
       if (res?.data?.pages?.create?.responseResult?.succeeded) {
-        router.push(`/docs/${slug}`);
-        router.refresh();
+        window.location.reload();
+        window.location.href = `/docs/${slug}`;
       } else {
         console.error(res);
         alert('페이지 생성 실패');
@@ -36,7 +36,13 @@ export default function ClientPage() {
     <>
       <MarkdownEditor initialMarkdown={markdown} onChange={setMarkdown} />
 
-      <button onClick={void handleSave()}>저장</button>
+      <button
+        onClick={() => {
+          void handleSave();
+        }}
+      >
+        저장
+      </button>
     </>
   );
 }
