@@ -20,6 +20,7 @@ export default function WikiEditorWrapper({ storedContent, allPages, onSave }: P
 
   const handleSave = async () => {
     const markdownForStorage = editorToStorage(markdown, pageByTitle);
+    console.log(markdownForStorage);
 
     await onSave(markdownForStorage);
   };

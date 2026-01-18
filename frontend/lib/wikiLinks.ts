@@ -1,33 +1,49 @@
-import { slugify } from './parseMarkdown';
+import { escapeHtml } from './escapeHtml';
 import { PageById } from './wikiLinkTransform';
 
-export function renderWikiLinks(html: string, pageById: PageById) {
-  return html.replace(/\[\[wiki:(\d+)(?:\|([^\]]+))?\]\]/g, (_, id, alias) => {
-    const page = pageById.get(Number(id));
-    if (!page) {
-      return `<span class="wiki-link-missing">없는 문서</span>`;
+export function renderWikiLinks(
+  html: string,
+  pageById: Map<number, { title: string; path: string }>,
+  pageByTitle: Map<string, { title: string; path: string }>
+) {
+  return html.replace(/\[\[(wiki|missing):([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_, type, raw, alias) => {
+    const label = alias ?? raw;
+    console.log({ type, raw, alias });
+
+    // 1️⃣ id 기반 (항상 안정적)
+    if (type === 'wiki') {
+      const page = pageById.get(Number(raw));
+      if (!page) {
+        return redLink(label, raw);
+      }
+      return blueLink(page.path, page.title);
     }
 
-    const text = alias || page.title;
+    // 2️⃣ title 기반 (실시간 판단!)
+    const page = pageByTitle.get(raw);
+    if (!page) {
+      return redLink(label, raw);
+    }
 
-    return `<a href="/docs/${page.path}" class="wiki-link">${text}</a>`;
+    return blueLink(page.path, label);
   });
 }
 
-export function renderWikiLinksById(
-  html: string,
-  pageMap: Map<number, { title: string; path: string }>
-) {
-  return html.replace(/\[\[wiki:(\d+)\]\]/g, (_, id) => {
-    const page = pageMap.get(Number(id));
+function blueLink(path: string, label: string) {
+  return `
+    <a href="/docs/${path}" style="color:#0645ad;">
+      ${label}
+    </a>
+  `;
+}
 
-    if (!page) {
-      // 존재하지 않는 페이지 → 빨간 링크
-      return `<span style="color:red">[[존재하지 않는 문서]]</span>`;
-    }
-
-    return `<a href="/docs/${page.path}" class="wiki-link">
-        ${page.title}
-      </a>`;
-  });
+function redLink(label: string, title: string) {
+  return `
+    <a
+      href="/write?title=${encodeURIComponent(title)}"
+      style="color:#ba0000;font-weight:500"
+    >
+      ${label}
+    </a>
+  `;
 }

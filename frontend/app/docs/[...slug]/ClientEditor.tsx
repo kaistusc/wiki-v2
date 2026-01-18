@@ -26,11 +26,10 @@ function ClientPage({
   const decodedSlug = decodeSlug(slug);
 
   const oldPath = decodedSlug.join('/');
-  const parentPath = decodedSlug.length > 1 ? decodedSlug.slice(0, -1).join('/') : '';
-
   const pageById = new Map(allPages.map((p) => [p.id, { title: p.title, path: p.path }]));
+  const pageByTitle = new Map(allPages.map((p) => [p.title, { title: p.title, path: p.path }]));
 
-  const html = renderWikiLinks(page.render, pageById);
+  const html = renderWikiLinks(page.render, pageById, pageByTitle);
 
   if (editing) {
     return (

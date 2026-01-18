@@ -1,6 +1,5 @@
 import { fetchAllPages, getWikiPage } from '@/lib/wiki';
 import { titleFromSlug } from '@/lib/parseMarkdown';
-import { renderWikiLinks, renderWikiLinksById } from '@/lib/wikiLinks';
 
 import ClientEditor from './ClientEditor';
 import NewPageEditor from './NewPageEditor';
