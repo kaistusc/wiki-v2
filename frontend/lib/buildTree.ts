@@ -1,46 +1,51 @@
 export type NavNode = {
   name: string;
-  path?: string;
   title?: string;
+  path?: string;
   children: NavNode[];
 };
 
-export function buildTree(pages: { path: string; title: string }[]): NavNode {
-  const root: NavNode = { name: 'root', children: [] };
+export function buildTree(pages: { title: string; path: string }[]): NavNode {
+  const root: NavNode = {
+    name: '',
+    children: [],
+  };
 
+  // 🔑 핵심: path → page map
+  const pageByPath = new Map<string, { title: string; path: string }>();
   for (const p of pages) {
-    const parts = p.path
-      .replace(/^\/+|\/+$/g, '')
-      .split('/')
-      .filter(Boolean);
-    let cur = root;
-
-    parts.forEach((seg, i) => {
-      let child = cur.children.find((c) => c.name === seg);
-      if (!child) {
-        child = { name: seg, children: [] };
-        cur.children.push(child);
-      }
-
-      const isLeaf = i === parts.length - 1;
-      if (isLeaf) {
-        child.path = p.path;
-        child.title = p.title;
-      }
-
-      cur = child;
-    });
+    pageByPath.set(p.path, p);
   }
 
-  const sortRec = (node: NavNode) => {
-    node.children.sort((a, b) => (a.title ?? a.name).localeCompare(b.title ?? b.name));
-    node.children.forEach(sortRec);
-  };
-  sortRec(root);
+  for (const page of pages) {
+    const segments = page.path.split('/');
+    let current = root;
+
+    let accPath = '';
+
+    for (const segment of segments) {
+      accPath = accPath ? `${accPath}/${segment}` : segment;
+
+      let child = current.children.find((c) => c.name === segment);
+
+      if (!child) {
+        child = {
+          name: segment,
+          children: [],
+        };
+        current.children.push(child);
+      }
+
+      // ✅ 이 노드가 실제 페이지인지 확인
+      const matchedPage = pageByPath.get(accPath);
+      if (matchedPage) {
+        child.path = matchedPage.path;
+        child.title = matchedPage.title;
+      }
+
+      current = child;
+    }
+  }
 
   return root;
-}
-
-export function rewriteChildPath(oldParent: string, newParent: string, childPath: string) {
-  return newParent + childPath.slice(oldParent.length);
 }

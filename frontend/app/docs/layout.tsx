@@ -9,9 +9,13 @@ function Tree({ node }: { node: NavNode }) {
       {node.children.map((c) => (
         <li key={c.name}>
           {c.path ? (
-            <Link href={`/docs/${c.path}`}>{c.title ?? c.name}</Link>
+            <Link href={`/docs/${c.path}`} style={{ color: '#0645ad' }}>
+              {c.title ?? c.name}
+            </Link>
           ) : (
-            <span>{c.name}</span>
+            <Link href={`/write?title=${encodeURIComponent(c.name)}`} style={{ color: '#ba0000' }}>
+              {c.name}
+            </Link>
           )}
           {c.children.length > 0 && <Tree node={c} />}
         </li>
@@ -22,6 +26,7 @@ function Tree({ node }: { node: NavNode }) {
 
 export default async function DocsLayout({ children }: { children: React.ReactNode }) {
   const pages = await fetchAllPages();
+
   const tree = buildTree(pages);
 
   return (

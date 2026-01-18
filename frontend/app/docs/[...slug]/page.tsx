@@ -13,6 +13,10 @@ export default async function DocsPage({ params }: { params: Promise<{ slug?: st
   const page = await getWikiPage(path);
   const temp = safeSlug[safeSlug.length - 1];
 
+  if (path.startsWith('__trash__')) {
+    return <div>Not Found</div>;
+  }
+
   if (temp === '_new') {
     return <NewPageEditor />;
   }

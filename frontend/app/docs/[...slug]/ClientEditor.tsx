@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 
 import WikiEditorWrapper from '@/components/WikiEditorWrapper';
-import { updatePageAndChildren } from '@/lib/wiki';
+import { deleteWikiPage, softDeleteWikiPage, updatePageAndChildren } from '@/lib/wiki';
 import { decodeSlug, parseMarkdown, slugify } from '@/lib/parseMarkdown';
 import { renderWikiLinks } from '@/lib/wikiLinks';
 
@@ -64,6 +64,18 @@ function ClientPage({
         }}
       >
         하위 페이지 생성
+      </button>
+      <button
+        onClick={() => {
+          if (!confirm('이 문서를 휴지통으로 이동할까요?')) return;
+
+          void (async () => {
+            await softDeleteWikiPage(page.id, oldPath);
+            window.location.href = '/docs/home';
+          })();
+        }}
+      >
+        삭제
       </button>
       <article dangerouslySetInnerHTML={{ __html: html }} />
     </main>
