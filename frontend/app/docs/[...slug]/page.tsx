@@ -1,5 +1,6 @@
-import { getWikiPage } from '@/lib/wiki';
+import { fetchAllPages, getWikiPage } from '@/lib/wiki';
 import { titleFromSlug } from '@/lib/parseMarkdown';
+import { renderWikiLinks, renderWikiLinksById } from '@/lib/wikiLinks';
 
 import ClientEditor from './ClientEditor';
 import NewPageEditor from './NewPageEditor';
@@ -18,5 +19,7 @@ export default async function DocsPage({ params }: { params: Promise<{ slug?: st
   }
   if (!page) return <div>Not Found</div>;
 
-  return <ClientEditor page={page} title={title} />;
+  const allPages = await fetchAllPages();
+
+  return <ClientEditor page={page} title={title} allPages={allPages} />;
 }

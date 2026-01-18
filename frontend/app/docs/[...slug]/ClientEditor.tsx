@@ -3,46 +3,55 @@
 import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 
-import { updatePageAndChildren, updateWikiPageWithPath } from '@/lib/wiki';
-import MarkdownEditor from '@/components/WikiEditor';
+import WikiEditorWrapper from '@/components/WikiEditorWrapper';
+import { updatePageAndChildren } from '@/lib/wiki';
 import { decodeSlug, parseMarkdown, slugify } from '@/lib/parseMarkdown';
+import { renderWikiLinks } from '@/lib/wikiLinks';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-function ClientPage({ page, title }: { page: any; title: string }) {
+function ClientPage({
+  page,
+  title,
+  allPages,
+}: {
+  page: any;
+  title: string;
+  allPages: { id: number; title: string; path: string }[];
+}) {
   const [editing, setEditing] = useState(false);
-  const [markdown, setMarkdown] = useState(page.content);
   const router = useRouter();
   const params = useParams();
 
   const slug = (params.slug ?? []) as string[];
-  const currentPath = slug.join('/');
+  const decodedSlug = decodeSlug(slug);
+
+  const oldPath = decodedSlug.join('/');
+  const parentPath = decodedSlug.length > 1 ? decodedSlug.slice(0, -1).join('/') : '';
+
+  const pageById = new Map(allPages.map((p) => [p.id, { title: p.title, path: p.path }]));
+
+  const html = renderWikiLinks(page.render, pageById);
 
   if (editing) {
     return (
-      <>
-        <MarkdownEditor initialMarkdown={`# ${title}\n${page.content}`} onChange={setMarkdown} />
-        <button
-          onClick={() => {
-            void (async () => {
-              const { title, body } = parseMarkdown(markdown);
+      <WikiEditorWrapper
+        storedContent={`# ${title}\n${page.content}`}
+        allPages={allPages}
+        onSave={async (markdownForStorage) => {
+          const { title, body } = parseMarkdown(markdownForStorage);
+          const decodedSlug = decodeSlug(slug);
+          const oldPath = decodedSlug.join('/');
 
-              const decodedSlug = decodeSlug(slug);
-              const oldPath = decodedSlug.join('/');
+          const parentPath = decodedSlug.length > 1 ? decodedSlug.slice(0, -1).join('/') : '';
 
-              const parentPath = decodedSlug.length > 1 ? decodedSlug.slice(0, -1).join('/') : '';
+          const newSlug = slugify(title);
+          const newPath = parentPath ? `${parentPath}/${newSlug}` : newSlug;
 
-              const newSlug = slugify(title);
-              const newPath = parentPath ? `${parentPath}/${newSlug}` : newSlug;
+          await updatePageAndChildren(page.id, oldPath, newPath, title, body);
 
-              await updatePageAndChildren(page.id, oldPath, newPath, title, body);
-
-              window.location.href = `/docs/${newPath}`;
-            })();
-          }}
-        >
-          저장
-        </button>
-      </>
+          window.location.href = `/docs/${newPath}`;
+        }}
+      />
     );
   }
 
@@ -52,12 +61,12 @@ function ClientPage({ page, title }: { page: any; title: string }) {
       <button onClick={() => setEditing(true)}>수정</button>
       <button
         onClick={() => {
-          router.push(`/docs/${currentPath}/_new`);
+          router.push(`/docs/${oldPath}/_new`);
         }}
       >
         하위 페이지 생성
       </button>
-      <article dangerouslySetInnerHTML={{ __html: page.render }} />
+      <article dangerouslySetInnerHTML={{ __html: html }} />
     </main>
   );
 }
