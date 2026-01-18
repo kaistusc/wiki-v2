@@ -1,45 +1,20 @@
-'use client';
+import { fetchAllPages } from '@/lib/wiki';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import ClientPage from './Client';
 
-import MarkdownEditor from '@/components/WikiEditor';
-import { createWikiPage } from '@/lib/wiki';
-import { parseMarkdown, slugify } from '@/lib/parseMarkdown';
+export const dynamic = 'force-dynamic';
 
-export default function ClientPage() {
-  const [markdown, setMarkdown] = useState('# Title here');
-  const router = useRouter();
+type SearchParams = {
+  title?: string;
+};
 
-  const handleSave = async () => {
-    try {
-      const { title, body } = parseMarkdown(markdown);
-      const slug = slugify(title);
-      const res = await createWikiPage(title, slug, body);
+export default async function WritePage({ searchParams }: { searchParams: Promise<SearchParams> }) {
+  const allPages = await fetchAllPages();
 
-      if (res?.data?.pages?.create?.responseResult?.succeeded) {
-        window.location.reload();
-        window.location.href = `/docs/${slug}`;
-      } else {
-        console.error(res);
-        alert('페이지 생성 실패');
-      }
-    } catch (e: any) {
-      alert(e.message);
-    }
-  };
+  const resolvedSearchParams = await searchParams;
+  const prefillTitle = resolvedSearchParams.title ?? '';
 
-  return (
-    <>
-      <MarkdownEditor initialMarkdown={markdown} onChange={setMarkdown} />
+  console.log('Prefill Title (server):', prefillTitle);
 
-      <button
-        onClick={() => {
-          void handleSave();
-        }}
-      >
-        저장
-      </button>
-    </>
-  );
+  return <ClientPage allPages={allPages} prefillTitle={prefillTitle} />;
 }

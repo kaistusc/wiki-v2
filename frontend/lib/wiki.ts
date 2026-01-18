@@ -1,6 +1,6 @@
 'use server';
 
-import { rewriteChildPath } from './buildTree';
+import { formatDeleteTimestamp } from './time';
 
 const API = process.env.WIKI_API!;
 const TOKEN = process.env.WIKI_TOKEN!;
@@ -73,7 +73,9 @@ export async function fetchAllPages(): Promise<WikiPage[]> {
     console.error(json.errors);
     return [];
   }
-  return json.data.pages.list as WikiPage[];
+  const pages = json.data.pages.list;
+  const availablePages = pages.filter((page: WikiPage) => !page.path.startsWith('__trash__/'));
+  return availablePages as WikiPage[];
 }
 
 export async function updateWikiPageWithPath(
@@ -247,5 +249,35 @@ export async function getPageContentById(id: number) {
     }
     `,
     { id }
+  );
+}
+
+export async function deleteWikiPage(pageId: number) {
+  return gql(
+    `
+    mutation ($id: Int!) {
+      pages {
+        delete(id: $id) {
+          responseResult {
+            succeeded
+            message
+          }
+        }
+      }
+    }
+    `,
+    { id: pageId }
+  );
+}
+
+export async function softDeleteWikiPage(pageId: number, currentPath: string) {
+  const ts = formatDeleteTimestamp();
+  const trashPath = `__trash__/${currentPath}__deleted__${ts}`;
+  const pageRes = await getPageContentById(pageId);
+  return updateWikiPageWithPath(
+    pageId,
+    pageRes.data.pages.single.title,
+    pageRes.data.pages.single.content,
+    trashPath
   );
 }
