@@ -20,6 +20,7 @@ async function gql(query: string, variables?: any) {
 }
 
 export async function getWikiPage(path: string, locale = 'en') {
+  console.log('Fetching wiki page:', path, locale);
   const data = await gql(
     `
     query ($path: String!, $locale: String!) {
@@ -35,6 +36,7 @@ export async function getWikiPage(path: string, locale = 'en') {
     `,
     { path, locale }
   );
+  console.log(data);
   return data.data.pages.singleByPath;
 }
 
@@ -76,29 +78,47 @@ export async function fetchAllPages(): Promise<WikiPage[]> {
   return json.data.pages.list as WikiPage[];
 }
 
-export async function updateWikiPage(id: number, title: string, content: string) {
+export async function updateWikiPageWithPath(
+  id: number,
+  title: string,
+  content: string,
+  path: string,
+  locale = 'en'
+) {
   return gql(
     `
-    mutation (
+    mutation UpdatePage(
       $id: Int!
       $title: String!
       $content: String!
+      $path: String!
+      $locale: String!
       $tags: [String!]!
       $description: String!
       $editor: String!
+      $isPrivate: Boolean!
     ) {
       pages {
         update(
           id: $id
           title: $title
           content: $content
+          path: $path
+          locale: $locale
           tags: $tags
           description: $description
           editor: $editor
+          isPrivate: $isPrivate
+          isPublished: true
         ) {
           responseResult {
             succeeded
             message
+          }
+          page {
+            id
+            path
+            locale
           }
         }
       }
@@ -108,9 +128,62 @@ export async function updateWikiPage(id: number, title: string, content: string)
       id,
       title,
       content,
+      path,
+      locale,
       tags: [],
       description: '',
       editor: 'markdown',
+      isPrivate: false,
+    }
+  );
+}
+
+export async function createWikiPage(title: string, path: string, content: string, locale = 'en') {
+  return gql(
+    `
+    mutation CreatePage(
+      $title: String!
+      $path: String!
+      $content: String!
+      $locale: String!
+      $tags: [String!]!
+      $description: String!
+      $editor: String!
+      $isPrivate: Boolean!
+    ) {
+      pages {
+        create(
+          title: $title
+          path: $path
+          content: $content
+          locale: $locale
+          tags: $tags
+          description: $description
+          editor: $editor
+          isPublished: true
+          isPrivate: $isPrivate
+        ) {
+          responseResult {
+            succeeded
+            message
+          }
+          page {
+            id
+            path
+          }
+        }
+      }
+    }
+    `,
+    {
+      title,
+      path,
+      content,
+      locale,
+      tags: [],
+      description: '',
+      editor: 'markdown',
+      isPrivate: false,
     }
   );
 }
