@@ -33,8 +33,7 @@ export default async function DocsLayout({ children }: { children: React.ReactNo
     <div style={{ display: 'grid', gridTemplateColumns: '280px 1fr', gap: 24 }}>
       <aside>
         <Tree node={tree} />
-        <SearchBar />   
-        <br />
+        <SearchBar />
         <Link href="/write">새 페이지</Link>
       </aside>
       <section>{children}</section>

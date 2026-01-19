@@ -35,7 +35,6 @@ export default async function DocsLayout({ children }: { children: React.ReactNo
       <aside>
         <Tree node={tree} />
         <SearchBar />
-        <br />
         <Link href="/write">새 페이지</Link>
       </aside>
       <section>{children}</section>
