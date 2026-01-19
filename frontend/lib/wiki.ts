@@ -281,3 +281,46 @@ export async function softDeleteWikiPage(pageId: number, currentPath: string) {
     trashPath
   );
 }
+
+export async function fetchRecentPages(limit = 5): Promise<any[]> {
+  const res = await gql(
+    `
+    query ($limit: Int!) {
+      pages {
+        list(limit: $limit, orderBy: UPDATED, orderByDirection: DESC) {
+          id
+          title
+          path
+        }
+      }
+    }
+    `, { limit }
+  );
+
+  return res?.data?.pages?.list ?? [];
+}
+
+export async function searchWikiPages(query: string): Promise<any[]> {
+  const res = await gql(
+    `
+    query ($query: String!) {
+      pages {
+        search(query: $query) {
+          results {
+            id
+            title
+            path
+          }
+        }
+      }
+    }
+    `,
+    { query }
+  );
+
+  const allResults = res?.data?.pages?.search.results ?? [];
+
+  const withoutDeletedResults = allResults.filter((page: any) => !page.path.startsWith('__trash__/'));
+
+  return withoutDeletedResults;
+}

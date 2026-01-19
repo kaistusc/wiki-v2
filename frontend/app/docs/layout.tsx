@@ -2,6 +2,7 @@ import Link from 'next/link';
 
 import { buildTree, NavNode } from '@/lib/buildTree';
 import { fetchAllPages } from '@/lib/wiki';
+import SearchBar from '@/components/SearchBar';
 
 function Tree({ node }: { node: NavNode }) {
   return (
@@ -33,6 +34,8 @@ export default async function DocsLayout({ children }: { children: React.ReactNo
     <div style={{ display: 'grid', gridTemplateColumns: '280px 1fr', gap: 24 }}>
       <aside>
         <Tree node={tree} />
+        <SearchBar />
+        <br />
         <Link href="/write">새 페이지</Link>
       </aside>
       <section>{children}</section>
