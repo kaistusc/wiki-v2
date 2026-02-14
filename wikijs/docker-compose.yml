@@ -2,12 +2,15 @@ services:
   db:
     image: postgres:15
     restart: unless-stopped
+    ports:
+      - "5432:5432"
     environment:
       POSTGRES_DB: wikijs
       POSTGRES_USER: wikijs
       POSTGRES_PASSWORD: wikijs123
     volumes:
       - db-data:/var/lib/postgresql/data
+      - ../frontend/prisma/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
 
   wiki:
     image: ghcr.io/requarks/wiki:2

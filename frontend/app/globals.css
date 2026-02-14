@@ -1,43 +1,22 @@
 @import 'tailwindcss';
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --backgrond: #F6F6F6;
+  --foreground: #54595D;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
-}
+    /* [기존 코드] background: var(--background); */
 
-/* Wiki links */
+    /* [수정 코드] 상단에 그라데이션 배경 적용 */
+    /* #eef3f9(연한 하늘색)에서 시작해서 200px 지점부터는 #F6F6F6(기본 배경색)이 됩니다. */
+    background: linear-gradient(to bottom, #FFFFFF 0%, #F6F6F6 200px, #F6F6F6 100%);
+    
+    /* 스크롤을 내려도 그라데이션이 상단에 고정되도록 설정 */
+    background-attachment: fixed;
 
-.wiki-link {
-  color: #0645ad;
-  text-decoration: none;
-}
-
-.wiki-link:hover {
-  text-decoration: underline;
-}
-
-.wiki-link-missing {
-  color: #ba0000;
-  cursor: pointer;
-  font-weight: 500;
-}
+    color: var(--foreground);
+    
+    /* 폰트 설정 (이전 단계에서 설정한 변수명과 일치해야 합니다) */
+    font-family: var(--font-ibm), sans-serif;
+  }
