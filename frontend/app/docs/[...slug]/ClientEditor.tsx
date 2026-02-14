@@ -61,15 +61,15 @@ function ClientEditor({
   }
 
   return (
-    <main className="max-w-4xl mx-auto p-6 md:p-10">
+    <main className="max-w-4xl p-0 md:p-0">
       
       {}
-      <header className="mb-8 pb-6 border-b border-gray-200">
-        <h1 className="text-4xl font-extrabold text-gray-900 tracking-tight mb-6">
+      <header className="mb-2 pb-2 border-b border-gray-200">
+        <h1 className="text-4xl text-gray-900 tracking-tight">
           {title}
         </h1>
 
-        <div className="flex flex-wrap items-center gap-2">
+        {/* <div className="flex flex-wrap items-center gap-2">
           {}
           <button
             onClick={() => setEditing(true)}
@@ -99,7 +99,7 @@ function ClientEditor({
           >
             🗑️ 삭제
           </button>
-        </div>
+        </div> */}
       </header>
 
       {}
