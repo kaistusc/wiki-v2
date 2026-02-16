@@ -7,6 +7,10 @@ import { softDeleteWikiPage, updatePageAndChildren } from '@/lib/wiki';
 import { decodeSlug, parseMarkdown, slugify } from '@/lib/parseMarkdown';
 import { renderWikiLinks } from '@/lib/wikiLinks';
 
+import MarkdownViewer from '@/components/MarkdownViewer';
+import MarkdownEditor from '@/components/WikiEditor';
+import TableOfContents from '@/components/TableOfContents';
+
 /* eslint-disable @typescript-eslint/no-explicit-any */
 function ClientEditor({
   page,
@@ -71,44 +75,12 @@ function ClientEditor({
         <h1 className="text-4xl text-gray-900 tracking-tight">
           {title}
         </h1>
-
-        {/* <div className="flex flex-wrap items-center gap-2">
-          {}
-          <button
-            onClick={() => setEditing(true)}
-            className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors flex items-center gap-1"
-          >
-            ✏️ 편집
-          </button>
-
-          {}
-          <button
-            onClick={() => router.push(`/docs/${oldPath}/_new`)}
-            className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors flex items-center gap-1"
-          >
-            ➕ 하위 페이지
-          </button>
-
-          {}
-          <button
-            onClick={() => {
-              if (!confirm('정말로 이 문서를 휴지통으로 이동하시겠습니까?')) return;
-              void (async () => {
-                await softDeleteWikiPage(page.id, oldPath);
-                window.location.href = '/docs/home';
-              })();
-            }}
-            className="ml-auto px-3 py-1.5 text-sm font-medium text-red-600 bg-red-50 rounded-md hover:bg-red-100 transition-colors flex items-center gap-1"
-          >
-            🗑️ 삭제
-          </button>
-        </div> */}
       </header>
 
-      {}
-      {}
+      <TableOfContents content={html} />
+
       <article className="prose prose-slate max-w-none text-gray-800 leading-relaxed">
-        <div dangerouslySetInnerHTML={{ __html: html }} />
+        <MarkdownViewer content={html} />
       </article>
 
     </main>
