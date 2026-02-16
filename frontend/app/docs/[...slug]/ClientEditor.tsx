@@ -68,7 +68,7 @@ function ClientEditor({
 
   return (
     <main className="max-w-none p-0">
-      {/* 1. 문서 제목 (공통 최상단) */}
+      {/* 문서 제목 (공통 최상단) */}
       <header className="mb-0 pb-2 border-b border-gray-200 flex justify-between items-end">
         <h1 className="text-3xl font-sans font-bold text-gray-900 mb-1 tracking-tight">{title}</h1>
       </header>

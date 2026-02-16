@@ -1,26 +1,16 @@
 @import 'tailwindcss';
 
 :root {
-  --background: #F6F6F6;
-  --foreground: #54595D;
+  --background: #f6f6f6;
+  --foreground: #54595d;
 }
 
 body {
-  /* [기존 코드] background: var(--background); */
-
-  /* [수정 코드] 상단에 그라데이션 배경 적용 */
-  /* #eef3f9(연한 하늘색)에서 시작해서 200px 지점부터는 #F6F6F6(기본 배경색)이 됩니다. */
-  background: linear-gradient(to bottom, #FFFFFF 0%, #F6F6F6 200px, #F6F6F6 100%);
-  
-  /* 스크롤을 내려도 그라데이션이 상단에 고정되도록 설정 */
+  background: linear-gradient(to bottom, #ffffff 0%, #f6f6f6 200px, #f6f6f6 100%);
   background-attachment: fixed;
-
   color: var(--foreground);
-  
-  /* 폰트 설정 (이전 단계에서 설정한 변수명과 일치해야 합니다) */
   font-family: var(--font-inter), sans-serif;
 }
-/* app/globals.css */
 
 .toastui-editor-contents h1 .toc-anchor,
 .toastui-editor-contents h2 .toc-anchor,
@@ -30,9 +20,6 @@ body {
 }
 
 @layer utilities {
-  /* 1. Toast UI 뷰어 & 에디터 내부 폰트 강제 변경 */
-  /* .toastui-editor-contents : 뷰어/에디터 내부 글자 */
-  /* .toastui-editor-defaultUI : 툴바, 버튼 등 UI */
   .toastui-editor-contents,
   .toastui-editor-defaultUI,
   .toastui-editor-main {
