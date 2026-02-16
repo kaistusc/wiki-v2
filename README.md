@@ -1,5 +1,5 @@
 # wiki-v2
-## Prerequistes
+## Prerequisites
 node.js, docker, pnpm
 
 ## backend (Wiki.js)
