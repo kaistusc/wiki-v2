@@ -7,6 +7,10 @@ import { softDeleteWikiPage, updatePageAndChildren } from '@/lib/wiki';
 import { decodeSlug, parseMarkdown, slugify } from '@/lib/parseMarkdown';
 import { renderWikiLinks } from '@/lib/wikiLinks';
 
+import MarkdownViewer from '@/components/MarkdownViewer';
+import MarkdownEditor from '@/components/WikiEditor';
+import TableOfContents from '@/components/TableOfContents';
+
 /* eslint-disable @typescript-eslint/no-explicit-any */
 function ClientEditor({
   page,
@@ -64,52 +68,27 @@ function ClientEditor({
   }
 
   return (
-    <main className="max-w-4xl p-0 md:p-0">
+    <main className="max-w-none p-0">
       
-      {}
-      <header className="mb-2 pb-2 border-b border-gray-200">
-        <h1 className="text-4xl text-gray-900 tracking-tight">
+      {/* 1. 문서 제목 (공통 최상단) */}
+      <header className="mb-0 pb-2 border-b border-gray-200 flex justify-between items-end">
+        <h1 className="text-3xl font-sans font-bold text-gray-900 mb-1 tracking-tight">
           {title}
         </h1>
-
-        {/* <div className="flex flex-wrap items-center gap-2">
-          {}
-          <button
-            onClick={() => setEditing(true)}
-            className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors flex items-center gap-1"
-          >
-            ✏️ 편집
-          </button>
-
-          {}
-          <button
-            onClick={() => router.push(`/docs/${oldPath}/_new`)}
-            className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors flex items-center gap-1"
-          >
-            ➕ 하위 페이지
-          </button>
-
-          {}
-          <button
-            onClick={() => {
-              if (!confirm('정말로 이 문서를 휴지통으로 이동하시겠습니까?')) return;
-              void (async () => {
-                await softDeleteWikiPage(page.id, oldPath);
-                window.location.href = '/docs/home';
-              })();
-            }}
-            className="ml-auto px-3 py-1.5 text-sm font-medium text-red-600 bg-red-50 rounded-md hover:bg-red-100 transition-colors flex items-center gap-1"
-          >
-            🗑️ 삭제
-          </button>
-        </div> */}
       </header>
 
-      {}
-      {}
-      <article className="prose prose-slate max-w-none text-gray-800 leading-relaxed">
-        <div dangerouslySetInnerHTML={{ __html: html }} />
-      </article>
+      <div className="flex flex-col lg:flex-row lg:gap-8 relative">
+        <aside className="order-1 lg:order-2 lg:w-64 lg:shrink-0 z-10">
+           <div className="lg:sticky lg:top-4"> 
+              <TableOfContents content={html} />
+           </div>
+        </aside>
+
+        <article className="order-2 lg:order-1 flex-1 min-w-0 prose prose-slate max-w-none text-gray-800 leading-relaxed text-[16px]">
+           <MarkdownViewer content={html} />
+        </article>
+
+      </div>
 
     </main>
   );
