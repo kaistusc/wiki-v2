@@ -68,20 +68,27 @@ function ClientEditor({
   }
 
   return (
-    <main className="max-w-4xl p-0 md:p-0">
+    <main className="max-w-none p-0">
       
-      {}
-      <header className="mb-2 pb-2 border-b border-gray-200">
-        <h1 className="text-4xl text-gray-900 tracking-tight">
+      {/* 1. 문서 제목 (공통 최상단) */}
+      <header className="mb-0 pb-2 border-b border-gray-200 flex justify-between items-end">
+        <h1 className="text-3xl font-sans font-bold text-gray-900 mb-1 tracking-tight">
           {title}
         </h1>
       </header>
 
-      <TableOfContents content={html} />
+      <div className="flex flex-col lg:flex-row lg:gap-8 relative">
+        <aside className="order-1 lg:order-2 lg:w-64 lg:shrink-0 z-10">
+           <div className="lg:sticky lg:top-4"> 
+              <TableOfContents content={html} />
+           </div>
+        </aside>
 
-      <article className="prose prose-slate max-w-none text-gray-800 leading-relaxed">
-        <MarkdownViewer content={html} />
-      </article>
+        <article className="order-2 lg:order-1 flex-1 min-w-0 prose prose-slate max-w-none text-gray-800 leading-relaxed text-[16px]">
+           <MarkdownViewer content={html} />
+        </article>
+
+      </div>
 
     </main>
   );

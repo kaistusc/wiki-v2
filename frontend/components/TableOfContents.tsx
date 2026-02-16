@@ -45,7 +45,7 @@ export default function TableOfContents({ content }: { content: string }) {
   if (toc.length === 0) return null;
 
   return (
-    <div className="inline-block min-w-[300px] my-4 border border-[#A3A9B1] bg-[#F8F9FA] p-3 text-sm rounded-sm">
+    <div className="my-4 border border-[#A3A9B1] bg-[#F8F9FA] p-3 text-sm rounded-sm w-1/2 lg:w-auto">
       <div className="flex justify-between items-center mb-2">
         <span className="font-bold text-center w-full">목차</span>
         <button 

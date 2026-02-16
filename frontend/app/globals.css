@@ -18,7 +18,7 @@ body {
   color: var(--foreground);
   
   /* 폰트 설정 (이전 단계에서 설정한 변수명과 일치해야 합니다) */
-  font-family: var(--font-ibm), sans-serif;
+  font-family: var(--font-inter), sans-serif;
 }
 /* app/globals.css */
 
@@ -29,3 +29,13 @@ body {
   display: none !important;
 }
 
+@layer utilities {
+  /* 1. Toast UI 뷰어 & 에디터 내부 폰트 강제 변경 */
+  /* .toastui-editor-contents : 뷰어/에디터 내부 글자 */
+  /* .toastui-editor-defaultUI : 툴바, 버튼 등 UI */
+  .toastui-editor-contents,
+  .toastui-editor-defaultUI,
+  .toastui-editor-main {
+    font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif !important;
+  }
+}
