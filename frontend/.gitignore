@@ -40,4 +40,7 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-/public
+# public: track static assets, ignore only generated content
+/public/uploads
+/public/tmp
+/public/cache

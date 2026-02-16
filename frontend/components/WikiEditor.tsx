@@ -40,11 +40,11 @@ export default function MarkdownEditor({ initialMarkdown, onChange }: Props) {
       const editorInstance = editorRef.current?.getInstance();
       if (editorInstance) {
         const currentMarkdown = editorInstance.getMarkdown();
-        
+
         const contentToInsert = file.type.startsWith('image/')
           ? `![${file.name}](${url})`
           : `[${file.name}](${url})`;
-        
+
         editorInstance.setMarkdown(currentMarkdown + '\n' + contentToInsert);
       }
     } catch (error) {
@@ -92,15 +92,40 @@ export default function MarkdownEditor({ initialMarkdown, onChange }: Props) {
     ];
   }, []);
 
+  const handleImageUpload = async (
+    blob: Blob | File,
+    callback: (url: string, altText?: string) => void
+  ) => {
+    const file = blob instanceof File ? blob : new File([blob], 'image.png', { type: blob.type });
+
+    const fd = new FormData();
+    fd.append('file', file);
+
+    const res = await fetch('/api/upload', {
+      method: 'POST',
+      body: fd,
+    });
+
+    if (!res.ok) {
+      alert('이미지 업로드 실패');
+      return;
+    }
+
+    const { url } = await res.json();
+    callback(url, file.name);
+  };
+
   return (
     <>
       <input
         type="file"
         ref={fileInputRef}
-        onChange={handleFileChange}
+        onChange={(e) => {
+          void handleFileChange(e);
+        }}
         style={{ display: 'none' }}
       />
-      
+
       <ToastEditor
         ref={editorRef}
         initialValue={initialMarkdown}
@@ -108,32 +133,12 @@ export default function MarkdownEditor({ initialMarkdown, onChange }: Props) {
         height="70vh"
         initialEditType="markdown"
         hideModeSwitch
-
         hooks={{
-          addImageBlobHook: async (
+          addImageBlobHook: (
             blob: Blob | File,
             callback: (url: string, altText?: string) => void
           ) => {
-            const file =
-              blob instanceof File ? blob : new File([blob], 'image.png', { type: blob.type });
-
-            const fd = new FormData();
-            fd.append('file', file);
-
-            console.log('Uploading image...', fd);
-
-            const res = await fetch('/api/upload', {
-              method: 'POST',
-              body: fd,
-            });
-
-            if (!res.ok) {
-              alert('이미지 업로드 실패');
-              return;
-            }
-
-            const { url } = await res.json();
-            callback(url, file.name);
+            void handleImageUpload(blob, callback);
           },
         }}
         onChange={() => {
