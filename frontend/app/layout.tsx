@@ -7,6 +7,7 @@ import './globals.css';
 
 import { buildTree, NavNode } from '@/lib/buildTree';
 import { fetchAllPages } from '@/lib/wiki';
+import WikiTabs from '@/components/WikiTabs';
 import SearchBar from '@/components/SearchBar';
 
 const inter = Inter({
@@ -124,36 +125,9 @@ export default async function RootLayout({
 
             {/* 2. 탭(Tab) & 검색창 영역 */}
             <div className="flex items-end h-[2rem] relative" >
-              {/* 왼쪽 탭: 문서 / 토론 */}
-              <div className="flex h-full z-10">
-                {/* [Active Tab] 배경 White, Border Gray 300 (#A3A9B1), 하단 Border 없음 */}
-                <div className="px-2 flex items-center bg-white border border-[#A7D7F9] border-b-white border-t-white text-sm font-bold text-gray-900 cursor-default">
-                  문서
-                </div>
-                {/* [Inactive Tab] 배경 그라데이션, 글자 Primary Color */}
-                <Link href="#" className="px-2 flex items-center bg-gradient-to-b from-[#fbfbfb] to-[#f0f0f0] border border-[#A7D7F9] border-t-white text-sm text-[#0745AD] hover:bg-white transition-colors">
-                  토론
-                </Link>
-              </div>
-
-              {/* 오른쪽 탭: 읽기 / 편집 / 역사 (Spacer) */}
-              <div className="flex-1"></div>
-
-              <div className="flex h-full z-10 mr-4">
-                 <div className="px-2 flex items-center bg-white border border-[#A7D7F9] border-b-white border-t-white text-sm font-bold text-gray-900 cursor-default">
-                  읽기
-                </div>
-                <Link href="/write" className="px-2 flex items-center border hover:bg-white border-[#A7D7F9] border-t-white text-sm text-[#0745AD]">
-                  편집
-                </Link>
-                <Link href="#" className="px-2 flex items-center border hover:bg-white border-[#A7D7F9] border-t-white text-sm text-[#0745AD]">
-                  역사 보기
-                </Link>
-              </div>
-
-              {/* 검색창 */}
+              <WikiTabs />
               <div className="mb-1">
-                 <SearchBar />
+                <SearchBar />
               </div>
             </div>
 

@@ -1,7 +1,6 @@
 'use client';
 
-import { useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams, usePathname } from 'next/navigation';
 
 import WikiEditorWrapper from '@/components/WikiEditorWrapper';
 import { softDeleteWikiPage, updatePageAndChildren } from '@/lib/wiki';
@@ -18,9 +17,13 @@ function ClientEditor({
   title: string;
   allPages: { id: number; title: string; path: string }[];
 }) {
-  const [editing, setEditing] = useState(false);
   const router = useRouter();
   const params = useParams();
+
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  const isEditing = searchParams.get('mode') === 'edit';
 
   const slug = (params.slug ?? []) as string[];
   const decodedSlug = decodeSlug(slug);
@@ -29,7 +32,7 @@ function ClientEditor({
   const pageByTitle = new Map(allPages.map((p) => [p.title, { title: p.title, path: p.path }]));
   const html = renderWikiLinks(page.render, pageById, pageByTitle);
 
-  if (editing) {
+  if (isEditing) {
     return (
       <div className="max-w-5xl mx-auto p-6">
         <WikiEditorWrapper
@@ -50,7 +53,7 @@ function ClientEditor({
         />
         <div className="mt-4 text-center">
              <button 
-                onClick={() => setEditing(false)}
+                onClick={() => router.push(pathname)}
                 className="text-gray-500 hover:text-gray-700 underline text-sm"
              >
                 취소
