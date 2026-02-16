@@ -101,8 +101,6 @@ export default function MarkdownEditor({ initialMarkdown, onChange }: Props) {
     const fd = new FormData();
     fd.append('file', file);
 
-    console.log('Uploading image...', fd);
-
     const res = await fetch('/api/upload', {
       method: 'POST',
       body: fd,
