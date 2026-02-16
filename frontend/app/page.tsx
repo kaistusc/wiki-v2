@@ -1,6 +1,7 @@
-import { fetchRecentPages } from "@/lib/wiki";
-import SearchBar from "@/components/SearchBar";
-import Link from "next/link";
+import Link from 'next/link';
+
+import { fetchRecentPages } from '@/lib/wiki';
+import SearchBar from '@/components/SearchBar';
 
 export default async function Home() {
   return (
