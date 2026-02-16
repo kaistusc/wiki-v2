@@ -1,6 +1,6 @@
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
-CREATE TABLE uploads (
+CREATE TABLE IF NOT EXISTS uploads (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
 
   original_name TEXT NOT NULL,
