@@ -1,16 +1,16 @@
-import { fetchRecentPages } from "@/lib/wiki";
-import SearchBar from "@/components/SearchBar";
-import Link from "next/link";
+import Link from 'next/link';
+
+import { fetchRecentPages } from '@/lib/wiki';
+import SearchBar from '@/components/SearchBar';
 
 export default async function Home() {
   return (
     <div>
       <section>
-        <h1>카이위키 v2</h1>
-        <SearchBar />
+        <h1>대문</h1>
       </section>
 
-      <section>
+      {/* <section>
         <h2>최근 수정된 문서</h2>
           <ul>
             { (await fetchRecentPages()).map((page) => (
@@ -24,7 +24,7 @@ export default async function Home() {
           <Link href="/docs/_new" style={{ color: '#0645ad' }}>
             새 문서 만들기
           </Link>
-      </section>
+      </section> */}
     </div>
   );
 }
