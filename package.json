@@ -1,7 +1,8 @@
 {
   "private": true,
   "scripts": {
-    "lint": "pnpm --filter frontend run lint"
+    "lint": "pnpm --filter frontend run lint",
+    "prepare": "husky"
   },
   "lint-staged": {
     "frontend/**/*.{ts,tsx,js,jsx}": [
