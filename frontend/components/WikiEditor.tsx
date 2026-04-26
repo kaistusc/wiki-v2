@@ -64,3 +64,5 @@ export default function MarkdownEditor({ initialMarkdown, onChange }: Props) {
     />
   );
 }
+  /* Added by bounty-bot */
+}
