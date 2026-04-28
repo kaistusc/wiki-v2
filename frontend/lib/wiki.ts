@@ -1,5 +1,6 @@
 'use server';
 
+import { pool } from './db';
 import { formatDeleteTimestamp } from './time';
 
 const API = process.env.WIKI_API!;
@@ -44,6 +45,11 @@ type WikiPage = {
   title: string;
 };
 
+export type WikiRevisionMetaInput = {
+  editMessage?: string | null;
+  isMinor?: boolean;
+};
+
 export async function fetchAllPages(): Promise<WikiPage[]> {
   const res = await fetch(process.env.WIKI_API!, {
     method: 'POST',
@@ -78,14 +84,71 @@ export async function fetchAllPages(): Promise<WikiPage[]> {
   return availablePages as WikiPage[];
 }
 
+// 메타 정보를 포함하여 변경사항을 저장
+export async function saveWikiRevisionMeta({
+  pageId,
+  versionId,
+  authorId,
+  editMessage,
+  isMinor = false,
+}: {
+  pageId: number;
+  versionId: number;
+  authorId: number | null;
+  editMessage?: string | null;
+  isMinor?: boolean;
+}) {
+  const client = await pool.connect();
+
+  try {
+    console.log('[saveWikiRevisionMeta] saving:', {
+      pageId,
+      versionId,
+      authorId,
+      editMessage,
+      isMinor,
+    });
+
+    await client.query(
+      `
+      INSERT INTO wiki_revision_meta
+        (page_id, version_id, author_id, edit_message, is_minor)
+      VALUES
+        ($1, $2, $3, $4, $5)
+      ON CONFLICT (page_id, version_id)
+      DO UPDATE SET
+        author_id = EXCLUDED.author_id,
+        edit_message = EXCLUDED.edit_message,
+        is_minor = EXCLUDED.is_minor,
+        updated_at = NOW()
+      `,
+      [pageId, versionId, authorId, editMessage?.trim() || null, isMinor]
+    );
+
+    console.log('[saveWikiRevisionMeta] saved');
+  } catch (error) {
+    console.error('[saveWikiRevisionMeta] failed:', error);
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 export async function updateWikiPageWithPath(
   id: number,
   title: string,
   content: string,
   path: string,
-  locale = 'en'
+  locale = 'en',
+  revisionMeta?: WikiRevisionMetaInput
 ) {
-  return gql(
+  const previousRawHistory = revisionMeta ? await getRawWikiPageHistory(id, 0, 1) : null;
+
+  const previousLatestVersionId = previousRawHistory?.trail[0]?.versionId ?? null;
+
+  const hadNoRawHistoryBeforeUpdate = revisionMeta ? previousRawHistory?.trail.length === 0 : false;
+
+  const updateRes = await gql(
     `
     mutation UpdatePage(
       $id: Int!
@@ -136,10 +199,39 @@ export async function updateWikiPageWithPath(
       isPrivate: false,
     }
   );
+
+  const result = updateRes?.data?.pages?.update?.responseResult;
+  console.log('[updateWikiPageWithPath] update result:', result);
+
+  if (!result?.succeeded) {
+    return updateRes;
+  }
+
+  if (revisionMeta) {
+    const latestHistory = await getRawWikiPageHistory(id, 0, 5);
+
+    const newRevision =
+      latestHistory.trail.find((item) => item.versionId !== previousLatestVersionId) ??
+      latestHistory.trail[0];
+
+    if (newRevision) {
+      await saveWikiRevisionMeta({
+        pageId: id,
+        versionId: newRevision.versionId,
+        authorId: newRevision.authorId ?? null,
+        editMessage: revisionMeta.editMessage,
+        isMinor: revisionMeta.isMinor ?? false,
+      });
+    }
+  }
+
+  return updateRes;
 }
 
 export async function createWikiPage(title: string, path: string, content: string, locale = 'en') {
-  return gql(
+  const placeholderContent = '<!-- initial placeholder -->';
+
+  const createRes = await gql(
     `
     mutation CreatePage(
       $title: String!
@@ -178,7 +270,7 @@ export async function createWikiPage(title: string, path: string, content: strin
     {
       title,
       path,
-      content,
+      content: placeholderContent,
       locale,
       tags: [],
       description: '',
@@ -186,6 +278,25 @@ export async function createWikiPage(title: string, path: string, content: strin
       isPrivate: false,
     }
   );
+
+  if (createRes?.errors?.length) {
+    console.error('[createWikiPage] GraphQL errors:', createRes.errors);
+    return createRes;
+  }
+
+  const result = createRes?.data?.pages?.create?.responseResult;
+  const createdPage = createRes?.data?.pages?.create?.page;
+
+  if (!result?.succeeded || !createdPage?.id) {
+    return createRes;
+  }
+
+  await updateWikiPageWithPath(createdPage.id, title, content, path, locale, {
+    editMessage: '신규 문서 생성',
+    isMinor: false,
+  });
+
+  return createRes;
 }
 
 export async function listPages() {
@@ -210,13 +321,15 @@ export async function updatePageAndChildren(
   oldPath: string,
   newPath: string,
   title: string,
-  content: string
+  content: string,
+  revisionMeta?: WikiRevisionMetaInput
 ) {
   if (oldPath === newPath) {
-    await updateWikiPageWithPath(pageId, title, content, newPath);
+    await updateWikiPageWithPath(pageId, title, content, newPath, 'en', revisionMeta);
     return;
   }
-  await updateWikiPageWithPath(pageId, title, content, newPath);
+
+  await updateWikiPageWithPath(pageId, title, content, newPath, 'en', revisionMeta);
 
   const listRes = await listPages();
   const pages = listRes?.data?.pages?.list ?? [];
@@ -332,11 +445,15 @@ export async function searchWikiPages(query: string): Promise<any[]> {
 export type WikiPageHistoryItem = {
   versionId: number;
   versionDate: string;
-  authorId: number;
+  authorId: number | null;
   authorName: string;
   actionType: string;
   valueBefore: string | null;
   valueAfter: string | null;
+
+  editMessage?: string | null;
+  isMinor?: boolean;
+  isSynthetic?: boolean;
 };
 
 export type WikiPageVersion = {
@@ -364,7 +481,52 @@ export type WikiPageHistory = {
   trail: WikiPageHistoryItem[];
 };
 
-export async function getWikiPageHistory(
+export async function getWikiRevisionMetas(pageId: number): Promise<
+  {
+    pageId: number;
+    versionId: number;
+    authorId: number | null;
+    editMessage: string | null;
+    isMinor: boolean;
+    createdAt: string;
+    updatedAt: string;
+  }[]
+> {
+  const client = await pool.connect();
+
+  try {
+    const result = await client.query(
+      `
+      SELECT
+        page_id,
+        version_id,
+        author_id,
+        edit_message,
+        is_minor,
+        created_at,
+        updated_at
+      FROM wiki_revision_meta
+      WHERE page_id = $1
+      ORDER BY created_at DESC
+      `,
+      [pageId]
+    );
+
+    return result.rows.map((row) => ({
+      pageId: row.page_id,
+      versionId: row.version_id,
+      authorId: row.author_id,
+      editMessage: row.edit_message,
+      isMinor: row.is_minor,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }));
+  } finally {
+    client.release();
+  }
+}
+
+async function getRawWikiPageHistory(
   pageId: number,
   offsetPage = 0,
   offsetSize = 50
@@ -398,9 +560,43 @@ export async function getWikiPageHistory(
     }
   );
 
+  if (res?.errors?.length) {
+    console.error('[getRawWikiPageHistory] GraphQL errors:', res.errors);
+  }
+
   return {
     total: res?.data?.pages?.history?.total ?? 0,
     trail: res?.data?.pages?.history?.trail ?? [],
+  };
+}
+
+export async function getWikiPageHistory(
+  pageId: number,
+  offsetPage = 0,
+  offsetSize = 50
+): Promise<{
+  total: number;
+  trail: WikiPageHistoryItem[];
+}> {
+  const rawHistory = await getRawWikiPageHistory(pageId, offsetPage, offsetSize);
+
+  const metas = await getWikiRevisionMetas(pageId);
+
+  const metaByVersionId = new Map(metas.map((meta) => [meta.versionId, meta]));
+
+  const mergedTrail = rawHistory.trail.map((item) => {
+    const meta = metaByVersionId.get(item.versionId);
+
+    return {
+      ...item,
+      editMessage: meta?.editMessage ?? null,
+      isMinor: meta?.isMinor ?? false,
+    };
+  });
+
+  return {
+    total: mergedTrail.length,
+    trail: mergedTrail,
   };
 }
 

@@ -10,6 +10,7 @@ import { renderWikiLinks } from '@/lib/wikiLinks';
 import MarkdownViewer from '@/components/MarkdownViewer';
 import MarkdownEditor from '@/components/WikiEditor';
 import TableOfContents from '@/components/TableOfContents';
+import HistoryView from '@/components/HistoryView';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 function ClientEditor({
@@ -89,62 +90,16 @@ function ClientEditor({
   }, [isHistory, page.id]);
 
   if (isHistory) {
-    return (
-      <div className="max-w-5xl mx-auto p-6">
-        <h1 className="text-xl font-semibold mb-4">역사 보기</h1>
-
-        {isLoadingHistory && <p>역사 정보를 불러오는 중...</p>}
-
-        {!isLoadingHistory && !history && <p>역사 정보를 불러오지 못했습니다.</p>}
-
-        {!isLoadingHistory && history && history.trail.length === 0 && <p>히스토리가 없습니다.</p>}
-
-        {!isLoadingHistory && history && history.trail.length > 0 && (
-          <div className="space-y-3">
-            <p className="text-sm text-gray-500">총 {history.total}개의 기록</p>
-
-            {history.trail.map((item) => (
-              <div key={item.versionId} className="border rounded-md p-4 bg-white">
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <p className="font-medium">Version #{item.versionId}</p>
-                    <p className="text-sm text-gray-500">
-                      {item.authorName} · {new Date(item.versionDate).toLocaleString()}
-                    </p>
-                  </div>
-
-                  <span className="text-sm rounded bg-gray-100 px-2 py-1">{item.actionType}</span>
-                </div>
-
-                {(item.valueBefore || item.valueAfter) && (
-                  <div className="mt-3 text-sm text-gray-700">
-                    {item.valueBefore && (
-                      <p>
-                        <span className="font-medium">Before:</span> {item.valueBefore}
-                      </p>
-                    )}
-
-                    {item.valueAfter && (
-                      <p>
-                        <span className="font-medium">After:</span> {item.valueAfter}
-                      </p>
-                    )}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    );
+    return <HistoryView pageTitle={page.title} history={history} isLoading={isLoadingHistory} />;
   }
+
   if (isEditing) {
     return (
       <div className="max-w-5xl mx-auto p-6">
         <WikiEditorWrapper
           storedContent={`# ${title}\n${page.content}`}
           allPages={allPages}
-          onSave={async (markdownForStorage) => {
+          onSave={async (markdownForStorage, revisionMeta) => {
             const { title: newTitle, body } = parseMarkdown(markdownForStorage);
             const decodedSlug = decodeSlug(slug);
 
@@ -152,7 +107,7 @@ function ClientEditor({
             const newSlug = slugify(newTitle);
             const newPath = parentPath ? `${parentPath}/${newSlug}` : newSlug;
 
-            await updatePageAndChildren(page.id, oldPath, newPath, newTitle, body);
+            await updatePageAndChildren(page.id, oldPath, newPath, newTitle, body, revisionMeta);
 
             router.push(`/docs/${newPath}`);
             router.refresh();
