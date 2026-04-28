@@ -5,10 +5,15 @@ import { useState } from 'react';
 import MarkdownEditor from '@/components/WikiEditor';
 import { storageToEditor, editorToStorage } from '@/lib/wikiLinkTransform';
 
+type WikiRevisionMetaInput = {
+  editMessage?: string | null;
+  isMinor?: boolean;
+};
+
 type Props = {
   storedContent: string;
   allPages: { id: number; title: string; path: string }[];
-  onSave: (markdownForStorage: string) => Promise<void>;
+  onSave: (markdownForStorage: string, revisionMeta: WikiRevisionMetaInput) => Promise<void>;
 };
 
 export default function WikiEditorWrapper({ storedContent, allPages, onSave }: Props) {
@@ -18,23 +23,61 @@ export default function WikiEditorWrapper({ storedContent, allPages, onSave }: P
 
   const [markdown, setMarkdown] = useState(storageToEditor(storedContent, pageById));
 
-  const handleSave = async () => {
-    const markdownForStorage = editorToStorage(markdown, pageByTitle);
-    console.log(markdownForStorage);
+  const [editMessage, setEditMessage] = useState('');
+  const [isMinor, setIsMinor] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
-    await onSave(markdownForStorage);
+  const handleSave = async () => {
+    if (isSaving) return;
+
+    try {
+      setIsSaving(true);
+
+      const markdownForStorage = editorToStorage(markdown, pageByTitle);
+
+      await onSave(markdownForStorage, {
+        editMessage: editMessage.trim() || null,
+        isMinor,
+      });
+
+      setEditMessage('');
+      setIsMinor(false);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
     <>
       <MarkdownEditor initialMarkdown={markdown} onChange={setMarkdown} />
-      <button
-        onClick={() => {
-          void handleSave();
-        }}
-      >
-        저장
-      </button>
+
+      <div className="mt-4 space-y-3 border-t border-gray-200 pt-4">
+        <label className="block">
+          <span className="mb-1 block text-sm font-medium text-gray-700">편집 요약</span>
+          <input
+            value={editMessage}
+            onChange={(e) => setEditMessage(e.target.value)}
+            placeholder="예: 오타 수정, 내용 보강, 링크 정리"
+            className="w-full rounded border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500"
+          />
+        </label>
+
+        <label className="flex items-center gap-2 text-sm text-gray-700">
+          <input type="checkbox" checked={isMinor} onChange={(e) => setIsMinor(e.target.checked)} />
+          <span>잔글로 표시</span>
+        </label>
+
+        <button
+          type="button"
+          onClick={() => {
+            void handleSave();
+          }}
+          disabled={isSaving}
+          className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {isSaving ? '저장 중...' : '저장'}
+        </button>
+      </div>
     </>
   );
 }
