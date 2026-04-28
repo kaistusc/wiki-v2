@@ -13,7 +13,7 @@ import TableOfContents from '@/components/TableOfContents';
 import HistoryView from '@/components/HistoryView';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-function ClientEditor({
+export function ClientEditor({
   page,
   title,
   allPages,
@@ -72,7 +72,15 @@ function ClientEditor({
   }, [isHistory, page.id]);
 
   if (isHistory) {
-    return <HistoryView pageTitle={page.title} history={history} isLoading={isLoadingHistory} />;
+    return (
+      <HistoryView
+        pageTitle={page.title}
+        history={history}
+        isLoading={isLoadingHistory}
+        pageId={page.id}
+        allPages={allPages}
+      />
+    );
   }
 
   if (isEditing) {
