@@ -35,6 +35,24 @@ function ClientEditor({
   const pageByTitle = new Map(allPages.map((p) => [p.title, { title: p.title, path: p.path }]));
   const html = renderWikiLinks(page.render, pageById, pageByTitle);
 
+  const handleDelete = () => {
+    if (!confirm('정말로 이 문서를 휴지통으로 이동하시겠습니까?')) return;
+
+    const executeDelete = async () => {
+      try {
+        await softDeleteWikiPage(page.id, oldPath);
+
+        router.refresh();
+        router.replace('/');
+      } catch (error) {
+        console.error('문서 삭제 중 오류가 발생했습니다:', error);
+        alert('문서를 삭제하는 데 실패했습니다. 다시 시도해 주세요.');
+      }
+    };
+
+    void executeDelete();
+  };
+
   if (isEditing) {
     return (
       <div className="max-w-5xl mx-auto p-6">
@@ -51,7 +69,8 @@ function ClientEditor({
 
             await updatePageAndChildren(page.id, oldPath, newPath, newTitle, body);
 
-            window.location.href = `/docs/${newPath}`;
+            router.push(`/docs/${newPath}`);
+            router.refresh();
           }}
         />
         <div className="mt-4 text-center">
@@ -83,6 +102,23 @@ function ClientEditor({
         <article className="order-2 lg:order-1 flex-1 min-w-0 prose prose-slate max-w-none text-gray-800 leading-relaxed text-[16px]">
           <MarkdownViewer content={html} />
         </article>
+      </div>
+
+      {/* 디자인 위치 수정 필요 */}
+      <div className="flex flex-wrap items-center gap-2 py-3 border-t border-gray-200 mt-6">
+        <button
+          onClick={() => router.push(`/docs/${oldPath}/_new`)}
+          className="px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-200 transition-colors flex items-center gap-1"
+        >
+          하위 페이지
+        </button>
+
+        <button
+          onClick={handleDelete}
+          className="px-3 py-1.5 text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 transition-colors flex items-center gap-1"
+        >
+          삭제
+        </button>
       </div>
     </main>
   );
