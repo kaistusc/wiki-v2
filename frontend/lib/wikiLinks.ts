@@ -30,20 +30,10 @@ export function renderWikiLinks(
 }
 
 function blueLink(path: string, label: string) {
-  return `
-    <a href="/docs/${path}" style="color:#0645ad;">
-      ${label}
-    </a>
-  `;
+  return `<a href="/docs/${path}" style="color:#0645ad;">${label}</a>`;
 }
 
 function redLink(label: string, title: string) {
-  return `
-    <a
-      href="/write?title=${encodeURIComponent(title)}"
-      style="color:#ba0000;font-weight:500"
-    >
-      ${label}
-    </a>
+  return `<a href="/write?title=${encodeURIComponent(title)}" style="color:#ba0000;font-weight:500">${label}</a>
   `;
 }
