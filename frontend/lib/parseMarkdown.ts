@@ -16,7 +16,7 @@ export function slugify(title: string) {
   return title
     .trim()
     .toLowerCase()
-    .replace(/[^\p{L}\p{N}\s-]/gu, '')
+    .replace(/[^\p{L}\p{N}\s\-:]/gu, '')
     .replace(/\s+/g, '-');
 }
 
