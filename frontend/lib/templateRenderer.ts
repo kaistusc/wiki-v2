@@ -1,7 +1,9 @@
 import { getWikiPage } from '@/lib/wiki';
 
 export async function injectTemplates(html: string): Promise<string> {
-  const templateRegex = /\(\*\s*(틀:[^\)]+)\)/g;
+  if (!html || typeof html !== 'string') return html || '';
+
+  const templateRegex = /\(\*\s*(틀:[^|)]+)(?:\|([^)]+))?\)/g;
   const matches = [...html.matchAll(templateRegex)];
 
   if (matches.length === 0) return html;
@@ -19,15 +21,46 @@ export async function injectTemplates(html: string): Promise<string> {
   let resultHtml = html;
 
   for (const match of matches) {
-    const rawTag = match[0];
-    const name = match[1].trim();
-    const content = templateMap.get(name);
+    const rawTag = match[0]; // (* 틀:회장 | 이름=최정흠 | 소속=항공우주공학과)
+    const name = match[1].trim(); // 틀:회장
+    const argString = match[2]; // 이름=최정흠 | 소속=항공우주공학과
 
+    const rawContent = templateMap.get(name);
     const safePath = encodeURIComponent(name);
     const basePath = `/docs/${safePath}`;
 
-    if (content) {
-      const templateWrapper = `<div class="wiki-template-container my-6"><div class="wiki-vde text-[11px] text-gray-400 flex gap-1 leading-none border-none mb-0 opacity-70 hover:opacity-100 transition-opacity"><a href="${basePath}" class="hover:text-blue-600 hover:underline" title="보기">V</a>&middot;<a href="${basePath}/discuss" class="hover:text-blue-600 hover:underline" title="토론">D</a>&middot;<a href="${basePath}?mode=edit" class="hover:text-blue-600 hover:underline" title="편집">E</a></div><div class="wiki-template-content w-full border-none [&>*:first-child]:!mt-1 [&>*:last-child]:!mb-0">${content}</div></div>`;
+    if (rawContent) {
+      const args: Record<string, string> = {};
+
+      if (argString) {
+        const parts = argString.split('|');
+
+        parts.forEach((part) => {
+          const trimmed = part.trim();
+          const eqIndex = trimmed.indexOf('=');
+
+          if (eqIndex !== -1) {
+            const key = trimmed.substring(0, eqIndex).trim();
+            const val = trimmed.substring(eqIndex + 1).trim();
+            args[key] = val;
+          } else if (trimmed.length > 0) {
+            console.warn(
+              `[Template] 무시된 인자: "${trimmed}". 틀(${name}) 호출 시 모든 인자는 '이름=값' 형태여야 합니다.`
+            );
+          }
+        });
+      }
+
+      const processedContent = rawContent.replace(
+        /\{\{\{([^}]+)\}\}\}/g,
+        (_: string, key: string) => {
+          const trimmedKey = key.trim();
+          return args[trimmedKey] !== undefined ? args[trimmedKey] : '';
+        }
+      );
+
+      const templateWrapper = `<div class="wiki-template-container my-6"><div class="wiki-vde text-[11px] text-gray-400 flex gap-1 leading-none border-none mb-0 opacity-70 hover:opacity-100 transition-opacity"><a href="${basePath}" class="hover:text-blue-600 hover:underline" title="보기">V</a>&middot;<a href="${basePath}/discuss" class="hover:text-blue-600 hover:underline" title="토론">D</a>&middot;<a href="${basePath}?mode=edit" class="hover:text-blue-600 hover:underline" title="편집">E</a></div><div class="wiki-template-content w-full border-none [&>*:first-child]:!mt-1 [&>*:last-child]:!mb-0">${processedContent}</div></div>`;
+
       resultHtml = resultHtml.replace(rawTag, templateWrapper);
     } else {
       const missingLink = `<a href="${basePath}?mode=edit" style="color:#ba0000;font-weight:500;border:1px dashed #ba0000;padding:2px 4px;font-size:0.9em;">[${name} (생성 필요)]</a>`;
