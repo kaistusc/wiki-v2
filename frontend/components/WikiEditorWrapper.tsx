@@ -14,9 +14,10 @@ type Props = {
   storedContent: string;
   allPages: { id: number; title: string; path: string }[];
   onSave: (markdownForStorage: string, revisionMeta: WikiRevisionMetaInput) => Promise<void>;
+  isNewPage?: boolean;
 };
 
-export default function WikiEditorWrapper({ storedContent, allPages, onSave }: Props) {
+export default function WikiEditorWrapper({ storedContent, allPages, onSave, isNewPage = false,}: Props) {
   const pageById = new Map(allPages.map((p) => [p.id, { title: p.title, path: p.path }]));
 
   const pageByTitle = new Map(allPages.map((p) => [p.title, { id: p.id }]));
@@ -36,8 +37,8 @@ export default function WikiEditorWrapper({ storedContent, allPages, onSave }: P
       const markdownForStorage = editorToStorage(markdown, pageByTitle);
 
       await onSave(markdownForStorage, {
-        editMessage: editMessage.trim() || null,
-        isMinor,
+        editMessage: isNewPage ?null : editMessage.trim() || null,
+        isMinor: isNewPage ? false : isMinor,
       });
 
       setEditMessage('');
@@ -52,20 +53,32 @@ export default function WikiEditorWrapper({ storedContent, allPages, onSave }: P
       <MarkdownEditor initialMarkdown={markdown} onChange={setMarkdown} />
 
       <div className="mt-4 space-y-3 border-t border-gray-200 pt-4">
-        <label className="block">
-          <span className="mb-1 block text-sm font-medium text-gray-700">편집 요약</span>
-          <input
-            value={editMessage}
-            onChange={(e) => setEditMessage(e.target.value)}
-            placeholder="예: 오타 수정, 내용 보강, 링크 정리"
-            className="w-full rounded border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500"
-          />
-        </label>
+        {!isNewPage && (
+          <>
+            <label className="block">
+              <span className="mb-1 block text-sm font-medium text-gray-700">
+                편집 요약
+              </span>
 
-        <label className="flex items-center gap-2 text-sm text-gray-700">
-          <input type="checkbox" checked={isMinor} onChange={(e) => setIsMinor(e.target.checked)} />
-          <span>잔글로 표시</span>
-        </label>
+              <input
+                value={editMessage}
+                onChange={(e) => setEditMessage(e.target.value)}
+                maxLength={75}
+                placeholder="예: 오타 수정, 내용 보강, 링크 정리"
+                className="w-full rounded border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500"
+              />
+            </label>
+
+            <label className="flex items-center gap-2 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                checked={isMinor}
+                onChange={(e) => setIsMinor(e.target.checked)}
+              />
+              <span>잔글로 표시</span>
+            </label>
+          </>
+        )}
 
         <button
           type="button"

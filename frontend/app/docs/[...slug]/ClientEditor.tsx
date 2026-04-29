@@ -99,6 +99,7 @@ function ClientEditor({
         <WikiEditorWrapper
           storedContent={`# ${title}\n${page.content}`}
           allPages={allPages}
+          isNewPage={false}
           onSave={async (markdownForStorage, revisionMeta) => {
             const { title: newTitle, body } = parseMarkdown(markdownForStorage);
             const decodedSlug = decodeSlug(slug);
