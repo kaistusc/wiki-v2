@@ -294,7 +294,8 @@ export async function fetchRecentPages(limit = 5): Promise<any[]> {
         }
       }
     }
-    `, { limit }
+    `,
+    { limit }
   );
 
   return res?.data?.pages?.list ?? [];
@@ -320,7 +321,50 @@ export async function searchWikiPages(query: string): Promise<any[]> {
 
   const allResults = res?.data?.pages?.search.results ?? [];
 
-  const withoutDeletedResults = allResults.filter((page: any) => !page.path.startsWith('__trash__/'));
+  const withoutDeletedResults = allResults.filter(
+    (page: any) => !page.path.startsWith('__trash__/')
+  );
 
   return withoutDeletedResults;
+}
+
+export async function fetchAllPagesWithContent(): Promise<any[]> {
+  const listRes = await gql(`
+    query {
+      pages {
+        list(limit: 5000) {
+          id
+          path
+          title
+        }
+      }
+    }
+  `);
+
+  const rawPages = listRes?.data?.pages?.list ?? [];
+  const validPages = rawPages.filter((page: any) => !page.path.startsWith('__trash__/'));
+
+  const pagesWithContent = await Promise.all(
+    validPages.map(async (page: any) => {
+      const singleRes = await gql(
+        `
+        query ($id: Int!) {
+          pages {
+            single(id: $id) {
+              content
+            }
+          }
+        }
+      `,
+        { id: page.id }
+      );
+
+      return {
+        ...page,
+        content: singleRes?.data?.pages?.single?.content || '',
+      };
+    })
+  );
+
+  return pagesWithContent;
 }
