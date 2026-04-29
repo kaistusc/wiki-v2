@@ -18,3 +18,6 @@ export default async function WritePage({ searchParams }: { searchParams: Promis
 
   return <ClientPage allPages={allPages} prefillTitle={prefillTitle} />;
 }
+
+const allPages = await fetchAllPages();
+console.log('allPages:', allPages);
