@@ -45,8 +45,7 @@ export function ClientEditor({
       try {
         await softDeleteWikiPage(page.id, oldPath);
 
-        router.refresh();
-        router.replace('/');
+        window.location.href = '/';
       } catch (error) {
         console.error('문서 삭제 중 오류가 발생했습니다:', error);
         alert('문서를 삭제하는 데 실패했습니다. 다시 시도해 주세요.');
@@ -119,8 +118,7 @@ export function ClientEditor({
 
             await updatePageAndChildren(page.id, oldPath, newPath, newTitle, body, revisionMeta);
 
-            router.push(`/docs/${newPath}`);
-            router.refresh();
+            window.location.href = `/docs/${newPath}`;
           }}
         />
         <div className="mt-4 text-center">
