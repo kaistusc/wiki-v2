@@ -1,9 +1,10 @@
 'use client';
 
 import { useParams, useRouter, useSearchParams, usePathname } from 'next/navigation';
+import { useEffect, useState } from 'react';
 
 import WikiEditorWrapper from '@/components/WikiEditorWrapper';
-import { softDeleteWikiPage, updatePageAndChildren } from '@/lib/wiki';
+import { softDeleteWikiPage, updatePageAndChildren, WikiPageHistory } from '@/lib/wiki';
 import { decodeSlug, parseMarkdown, slugify } from '@/lib/parseMarkdown';
 import { renderWikiLinks } from '@/lib/wikiLinks';
 import MarkdownViewer from '@/components/MarkdownViewer';
@@ -27,6 +28,7 @@ function ClientEditor({
   const searchParams = useSearchParams();
 
   const isEditing = searchParams.get('mode') === 'edit';
+  const isHistory = searchParams.get('mode') === 'history';
 
   const slug = (params.slug ?? []) as string[];
   const decodedSlug = decodeSlug(slug);
@@ -53,6 +55,89 @@ function ClientEditor({
     void executeDelete();
   };
 
+  const [history, setHistory] = useState<WikiPageHistory | null>(null);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+
+  useEffect(() => {
+    if (!isHistory) return;
+
+    async function fetchHistory() {
+      try {
+        setIsLoadingHistory(true);
+
+        console.log('Fetching history for page ID:', page.id);
+
+        const res = await fetch(`/api/wiki/history/${page.id}`);
+
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(`Failed to fetch history: ${res.status} ${text}`);
+        }
+
+        const data: WikiPageHistory = await res.json();
+
+        setHistory(data);
+      } catch (e) {
+        console.error('Failed to fetch history', e);
+        alert('역사 정보를 불러오는 데 실패했습니다.');
+      } finally {
+        setIsLoadingHistory(false);
+      }
+    }
+
+    void fetchHistory();
+  }, [isHistory, page.id]);
+
+  if (isHistory) {
+    return (
+      <div className="max-w-5xl mx-auto p-6">
+        <h1 className="text-xl font-semibold mb-4">역사 보기</h1>
+
+        {isLoadingHistory && <p>역사 정보를 불러오는 중...</p>}
+
+        {!isLoadingHistory && !history && <p>역사 정보를 불러오지 못했습니다.</p>}
+
+        {!isLoadingHistory && history && history.trail.length === 0 && <p>히스토리가 없습니다.</p>}
+
+        {!isLoadingHistory && history && history.trail.length > 0 && (
+          <div className="space-y-3">
+            <p className="text-sm text-gray-500">총 {history.total}개의 기록</p>
+
+            {history.trail.map((item) => (
+              <div key={item.versionId} className="border rounded-md p-4 bg-white">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="font-medium">Version #{item.versionId}</p>
+                    <p className="text-sm text-gray-500">
+                      {item.authorName} · {new Date(item.versionDate).toLocaleString()}
+                    </p>
+                  </div>
+
+                  <span className="text-sm rounded bg-gray-100 px-2 py-1">{item.actionType}</span>
+                </div>
+
+                {(item.valueBefore || item.valueAfter) && (
+                  <div className="mt-3 text-sm text-gray-700">
+                    {item.valueBefore && (
+                      <p>
+                        <span className="font-medium">Before:</span> {item.valueBefore}
+                      </p>
+                    )}
+
+                    {item.valueAfter && (
+                      <p>
+                        <span className="font-medium">After:</span> {item.valueAfter}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
   if (isEditing) {
     return (
       <div className="max-w-5xl mx-auto p-6">

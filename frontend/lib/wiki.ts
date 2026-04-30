@@ -294,7 +294,8 @@ export async function fetchRecentPages(limit = 5): Promise<any[]> {
         }
       }
     }
-    `, { limit }
+    `,
+    { limit }
   );
 
   return res?.data?.pages?.list ?? [];
@@ -320,7 +321,145 @@ export async function searchWikiPages(query: string): Promise<any[]> {
 
   const allResults = res?.data?.pages?.search.results ?? [];
 
-  const withoutDeletedResults = allResults.filter((page: any) => !page.path.startsWith('__trash__/'));
+  const withoutDeletedResults = allResults.filter(
+    (page: any) => !page.path.startsWith('__trash__/')
+  );
 
   return withoutDeletedResults;
+}
+
+// 역사 보기
+export type WikiPageHistoryItem = {
+  versionId: number;
+  versionDate: string;
+  authorId: number;
+  authorName: string;
+  actionType: string;
+  valueBefore: string | null;
+  valueAfter: string | null;
+};
+
+export type WikiPageVersion = {
+  versionId: number;
+  pageId: number;
+  title: string;
+  description: string;
+  path: string;
+  locale: string;
+  content: string;
+  contentType: string;
+  editor: string;
+  tags: string[];
+  isPrivate: boolean;
+  isPublished: boolean;
+  authorId: string;
+  authorName: string;
+  action: string;
+  createdAt: string;
+  versionDate: string;
+};
+
+export type WikiPageHistory = {
+  total: number;
+  trail: WikiPageHistoryItem[];
+};
+
+export async function getWikiPageHistory(
+  pageId: number,
+  offsetPage = 0,
+  offsetSize = 50
+): Promise<{
+  total: number;
+  trail: WikiPageHistoryItem[];
+}> {
+  const res = await gql(
+    `
+    query ($id: Int!, $offsetPage: Int, $offsetSize: Int) {
+      pages {
+        history(id: $id, offsetPage: $offsetPage, offsetSize: $offsetSize) {
+          total
+          trail {
+            versionId
+            versionDate
+            authorId
+            authorName
+            actionType
+            valueBefore
+            valueAfter
+          }
+        }
+      }
+    }
+    `,
+    {
+      id: pageId,
+      offsetPage,
+      offsetSize,
+    }
+  );
+
+  return {
+    total: res?.data?.pages?.history?.total ?? 0,
+    trail: res?.data?.pages?.history?.trail ?? [],
+  };
+}
+
+export async function getWikiPageVersion(
+  pageId: number,
+  versionId: number
+): Promise<WikiPageVersion | null> {
+  const res = await gql(
+    `
+    query ($pageId: Int!, $versionId: Int!) {
+      pages {
+        version(pageId: $pageId, versionId: $versionId) {
+          versionId
+          pageId
+          title
+          description
+          path
+          locale
+          content
+          contentType
+          editor
+          tags
+          isPrivate
+          isPublished
+          authorId
+          authorName
+          action
+          createdAt
+          versionDate
+        }
+      }
+    }
+    `,
+    {
+      pageId,
+      versionId,
+    }
+  );
+
+  return res?.data?.pages?.version ?? null;
+}
+
+export async function restoreWikiPageVersion(pageId: number, versionId: number) {
+  return gql(
+    `
+    mutation ($pageId: Int!, $versionId: Int!) {
+      pages {
+        restore(pageId: $pageId, versionId: $versionId) {
+          responseResult {
+            succeeded
+            message
+          }
+        }
+      }
+    }
+    `,
+    {
+      pageId,
+      versionId,
+    }
+  );
 }
