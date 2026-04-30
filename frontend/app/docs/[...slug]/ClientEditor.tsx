@@ -1,17 +1,19 @@
 'use client';
 
 import { useParams, useRouter, useSearchParams, usePathname } from 'next/navigation';
+import { useEffect, useState } from 'react';
 
 import WikiEditorWrapper from '@/components/WikiEditorWrapper';
-import { softDeleteWikiPage, updatePageAndChildren } from '@/lib/wiki';
+import { softDeleteWikiPage, updatePageAndChildren, WikiPageHistory } from '@/lib/wiki';
 import { decodeSlug, parseMarkdown, slugify } from '@/lib/parseMarkdown';
 import { renderWikiLinks } from '@/lib/wikiLinks';
 import MarkdownViewer from '@/components/MarkdownViewer';
 import MarkdownEditor from '@/components/WikiEditor';
 import TableOfContents from '@/components/TableOfContents';
+import HistoryView from '@/components/HistoryView';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-function ClientEditor({
+export function ClientEditor({
   page,
   title,
   allPages,
@@ -27,6 +29,7 @@ function ClientEditor({
   const searchParams = useSearchParams();
 
   const isEditing = searchParams.get('mode') === 'edit';
+  const isHistory = searchParams.get('mode') === 'history';
 
   const slug = (params.slug ?? []) as string[];
   const decodedSlug = decodeSlug(slug);
@@ -53,13 +56,60 @@ function ClientEditor({
     void executeDelete();
   };
 
+  const [history, setHistory] = useState<WikiPageHistory | null>(null);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+
+  useEffect(() => {
+    if (!isHistory) return;
+
+    async function fetchHistory() {
+      try {
+        setIsLoadingHistory(true);
+
+        console.log('Fetching history for page ID:', page.id);
+
+        const res = await fetch(`/api/wiki/history/${page.id}`);
+
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(`Failed to fetch history: ${res.status} ${text}`);
+        }
+
+        const data: WikiPageHistory = await res.json();
+        console.log('Fetched history data:', data);
+
+        setHistory(data);
+      } catch (e) {
+        console.error('Failed to fetch history', e);
+        alert('역사 정보를 불러오는 데 실패했습니다.');
+      } finally {
+        setIsLoadingHistory(false);
+      }
+    }
+
+    void fetchHistory();
+  }, [isHistory, page.id]);
+
+  if (isHistory) {
+    return (
+      <HistoryView
+        pageTitle={page.title}
+        history={history}
+        isLoading={isLoadingHistory}
+        pageId={page.id}
+        allPages={allPages}
+      />
+    );
+  }
+
   if (isEditing) {
     return (
       <div className="max-w-5xl mx-auto p-6">
         <WikiEditorWrapper
           storedContent={`# ${title}\n${page.content}`}
           allPages={allPages}
-          onSave={async (markdownForStorage) => {
+          isNewPage={false}
+          onSave={async (markdownForStorage, revisionMeta) => {
             const { title: newTitle, body } = parseMarkdown(markdownForStorage);
             const decodedSlug = decodeSlug(slug);
 
@@ -67,7 +117,7 @@ function ClientEditor({
             const newSlug = slugify(newTitle);
             const newPath = parentPath ? `${parentPath}/${newSlug}` : newSlug;
 
-            await updatePageAndChildren(page.id, oldPath, newPath, newTitle, body);
+            await updatePageAndChildren(page.id, oldPath, newPath, newTitle, body, revisionMeta);
 
             router.push(`/docs/${newPath}`);
             router.refresh();
