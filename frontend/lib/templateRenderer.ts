@@ -3,6 +3,7 @@ import { getWikiPage } from '@/lib/wiki';
 export async function injectTemplates(html: string): Promise<string> {
   if (!html || typeof html !== 'string') return html || '';
 
+  // (* 틀:TemplateName | arg1=val1 | arg2=val2) 템플릿 호출 찾기
   const templateRegex = /\(\*\s*(틀:[^|)]+)(?:\|([^)]+))?\)/g;
   const matches = [...html.matchAll(templateRegex)];
 
@@ -17,6 +18,7 @@ export async function injectTemplates(html: string): Promise<string> {
     })
   );
 
+  // 템플릿 이름과 렌더링된 HTML을 매핑
   const templateMap = new Map(templatesData.map((t) => [t.name, t.render]));
   let resultHtml = html;
 
@@ -30,6 +32,7 @@ export async function injectTemplates(html: string): Promise<string> {
     const basePath = `/docs/${safePath}`;
 
     if (rawContent) {
+      // 인자 파싱
       const args: Record<string, string> = {};
 
       if (argString) {
@@ -51,10 +54,12 @@ export async function injectTemplates(html: string): Promise<string> {
         });
       }
 
+      // 템플릿의 {{{변수명}}} 치환 처리
       const processedContent = rawContent.replace(
         /\{\{\{([^}]+)\}\}\}/g,
         (_: string, key: string) => {
           const trimmedKey = key.trim();
+          // 인자가 제공되지 않은 경우 빈 문자열 반환
           return args[trimmedKey] !== undefined ? args[trimmedKey] : '';
         }
       );
