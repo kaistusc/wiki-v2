@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 
 import MarkdownEditor from '@/components/WikiEditor';
 import { storageToEditor, editorToStorage } from '@/lib/wikiLinkTransform';
@@ -13,7 +14,16 @@ type Props = {
   isNewPage?: boolean;
 };
 
-export default function WikiEditorWrapper({ storedContent, allPages, onSave, isNewPage = false,}: Props) {
+export default function WikiEditorWrapper({
+  storedContent,
+  allPages,
+  onSave,
+  isNewPage = false,
+}: Props) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
   const pageById = new Map(allPages.map((p) => [p.id, { title: p.title, path: p.path }]));
 
   const pageByTitle = new Map(allPages.map((p) => [p.title, { id: p.id }]));
@@ -24,6 +34,17 @@ export default function WikiEditorWrapper({ storedContent, allPages, onSave, isN
   const [isMinor, setIsMinor] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
+  const goToViewMode = () => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete('mode');
+
+    const queryString = params.toString();
+    const nextUrl = queryString ? `${pathname}?${queryString}` : pathname;
+
+    router.replace(nextUrl);
+    router.refresh();
+  };
+
   const handleSave = async () => {
     if (isSaving) return;
 
@@ -33,12 +54,14 @@ export default function WikiEditorWrapper({ storedContent, allPages, onSave, isN
       const markdownForStorage = editorToStorage(markdown, pageByTitle);
 
       await onSave(markdownForStorage, {
-        editMessage: isNewPage ?null : editMessage.trim() || null,
+        editMessage: isNewPage ? null : editMessage.trim() || null,
         isMinor: isNewPage ? false : isMinor,
       });
 
       setEditMessage('');
       setIsMinor(false);
+
+      goToViewMode();
     } finally {
       setIsSaving(false);
     }
@@ -52,9 +75,7 @@ export default function WikiEditorWrapper({ storedContent, allPages, onSave, isN
         {!isNewPage && (
           <>
             <label className="block">
-              <span className="mb-1 block text-sm font-medium text-gray-700">
-                편집 요약
-              </span>
+              <span className="mb-1 block text-sm font-medium text-gray-700">편집 요약</span>
 
               <input
                 value={editMessage}
