@@ -64,6 +64,7 @@ export async function injectTemplates(html: string): Promise<string> {
         }
       );
 
+      // TODO: 디자인 추가하기
       const templateWrapper = `<div class="wiki-template-container my-6"><div class="wiki-vde text-[11px] text-gray-400 flex gap-1 leading-none border-none mb-0 opacity-70 hover:opacity-100 transition-opacity"><a href="${basePath}" class="hover:text-blue-600 hover:underline" title="보기">V</a>&middot;<a href="${basePath}/discuss" class="hover:text-blue-600 hover:underline" title="토론">D</a>&middot;<a href="${basePath}?mode=edit" class="hover:text-blue-600 hover:underline" title="편집">E</a></div><div class="wiki-template-content w-full border-none [&>*:first-child]:!mt-1 [&>*:last-child]:!mb-0">${processedContent}</div></div>`;
 
       resultHtml = resultHtml.replace(rawTag, templateWrapper);
