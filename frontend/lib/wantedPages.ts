@@ -8,6 +8,7 @@ export function analyzeWantedPages(allPages: any[]) {
   allPages.forEach((page) => {
     const content = page.content || '';
 
+    // [[PageName]] 형식
     const wikiLinkRegex = /\[\[([^\]|]+)(?:\|[^\]]+)?\]\]/g;
     let linkMatch;
     while ((linkMatch = wikiLinkRegex.exec(content)) !== null) {
@@ -23,6 +24,7 @@ export function analyzeWantedPages(allPages: any[]) {
       }
     }
 
+    // []() 형식
     const mdLinkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
     let mdMatch;
     while ((mdMatch = mdLinkRegex.exec(content)) !== null) {
@@ -43,6 +45,7 @@ export function analyzeWantedPages(allPages: any[]) {
       }
     }
 
+    // (* 틀:TemplateName) 형식
     const templateRegex = /\(\*\s*(틀:[^|)]+)/g;
     let tempMatch;
     while ((tempMatch = templateRegex.exec(content)) !== null) {

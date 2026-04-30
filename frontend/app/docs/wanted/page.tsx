@@ -32,13 +32,10 @@ export default async function WantedPages() {
                   {/* 1. 필요한 틀 목록 내부의 Link 부분 */}
                   <Link
                     href={`/docs/${encodeURIComponent(item.name)}?mode=edit`}
-                    // 🌟 gap-3 추가, items-center 대신 items-start로 변경 (텍스트가 두 줄이 될 때를 대비)
                     className="text-red-700 font-medium hover:underline flex items-start justify-between gap-3"
                   >
-                    {/* 🌟 텍스트가 너무 길면 강제로 줄바꿈되도록 break-all 추가 */}
                     <span className="break-all">{item.name}</span>
 
-                    {/* 🌟 shrink-0(찌그러짐 방지), whitespace-nowrap(글자 줄바꿈 방지) 추가 */}
                     <span className="shrink-0 whitespace-nowrap text-[11px] bg-red-200 text-red-800 px-2 py-0.5 rounded-full mt-0.5">
                       {item.count}개의 문서에서 참조됨
                     </span>
@@ -68,13 +65,10 @@ export default async function WantedPages() {
                 >
                   <Link
                     href={`/docs/${encodeURIComponent(item.name)}?mode=edit`}
-                    // 🌟 gap-3 추가, items-start로 변경
                     className="text-orange-700 font-medium hover:underline flex items-start justify-between gap-3"
                   >
-                    {/* 🌟 break-all 추가 */}
                     <span className="break-all">{item.name}</span>
 
-                    {/* 🌟 shrink-0, whitespace-nowrap 추가 */}
                     <span className="shrink-0 whitespace-nowrap text-[11px] bg-orange-200 text-orange-800 px-2 py-0.5 rounded-full mt-0.5">
                       {item.count}개의 문서에서 참조됨
                     </span>
