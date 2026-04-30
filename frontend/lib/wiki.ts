@@ -650,11 +650,19 @@ export async function softDeleteWikiPage(pageId: number, currentPath: string) {
   const ts = formatDeleteTimestamp();
   const trashPath = `__trash__/${currentPath}__deleted__${ts}`;
   const pageRes = await getPageContentById(pageId);
+  const page = pageRes.data.pages.single;
+
   return updateWikiPageWithPath(
     pageId,
-    pageRes.data.pages.single.title,
-    pageRes.data.pages.single.content,
-    trashPath
+    page.title,
+    page.content,
+    trashPath,
+    'en',
+    {
+      editMessage: '문서 삭제',
+      isMinor: false,
+      previousContentForByteDiff: page.content,
+    }
   );
 }
 
@@ -799,6 +807,143 @@ export async function getWikiRevisionMetas(pageId: number): Promise<
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     }));
+  } finally {
+    client.release();
+  }
+}
+
+export type WikiEditLogItem = {
+  pageId: number;
+  versionId: number;
+  authorId: number | null;
+  authorName: string | null;
+  editMessage: string | null;
+  isMinor: boolean;
+  byteSize: number | null;
+  byteDiff: number | null;
+  createdAt: string;
+};
+
+export type WikiEditLogsResult = {
+  logs: WikiEditLogItem[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+};
+
+export async function getWikiEditLogs(
+  page: number,
+  limit: number,
+  filters?: {
+    author?: string;
+    target?: string;
+    type?: string;
+    from?: string;
+    to?: string;
+  }
+) {
+  const offset = (page - 1) * limit;
+
+  const where: string[] = [];
+  const values: unknown[] = [];
+
+  if (filters?.author) {
+    values.push(`%${filters.author}%`);
+    where.push(`m.author_name ILIKE $${values.length}`);
+  }
+
+  if (filters?.target) {
+    values.push(`%${filters.target}%`);
+    where.push(
+      `(p.title ILIKE $${values.length} OR p.path ILIKE $${values.length})`
+    );
+  }
+
+  if (filters?.type === 'create') {
+    where.push(`m.version_id = 1`);
+  }
+
+  if (filters?.type === 'edit') {
+    where.push(`m.version_id > 1`);
+  }
+
+  if (filters?.from) {
+    values.push(filters.from);
+    where.push(`m.created_at >= $${values.length}::date`);
+  }
+
+  if (filters?.to) {
+    values.push(filters.to);
+    where.push(`m.created_at < ($${values.length}::date + INTERVAL '1 day')`);
+  }
+
+  const whereSql = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
+
+  const client = await pool.connect();
+
+  try {
+    const logsResult = await client.query(
+      `
+      SELECT
+        m.page_id,
+        m.version_id,
+        p.title AS page_title,
+        p.path AS page_path,
+        m.author_id,
+        m.author_name,
+        m.edit_message,
+        m.is_minor,
+        m.byte_size,
+        m.byte_diff,
+        m.created_at
+      FROM wiki_revision_meta m
+      LEFT JOIN pages p
+        ON p.id = m.page_id
+      ${whereSql}
+      ORDER BY m.created_at DESC
+      LIMIT $${values.length + 1}
+      OFFSET $${values.length + 2}
+      `,
+      [...values, limit, offset]
+    );
+
+    const countResult = await client.query(
+      `
+      SELECT COUNT(*)::int AS total
+      FROM wiki_revision_meta m
+      LEFT JOIN pages p
+        ON p.id = m.page_id
+      ${whereSql}
+      `,
+      values
+    );
+
+    const total = countResult.rows[0]?.total ?? 0;
+
+    return {
+      logs: logsResult.rows.map((row) => ({
+        pageId: row.page_id,
+        versionId: row.version_id,
+        pageTitle: row.page_title,
+        pagePath: row.page_path,
+        authorId: row.author_id,
+        authorName: row.author_name,
+        editMessage: row.edit_message,
+        isMinor: row.is_minor,
+        byteSize: row.byte_size,
+        byteDiff: row.byte_diff,
+        createdAt: row.created_at,
+      })),
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
   } finally {
     client.release();
   }
