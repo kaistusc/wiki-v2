@@ -116,6 +116,11 @@ export default async function RootLayout({
                     파일 올리기
                   </Link>
                 </li>
+                <li className="mb-1">
+                  <Link href="/docs/wanted" className="hover:underline">
+                    작성이 필요한 문서
+                  </Link>
+                </li>
               </ul>
             </div>
           </aside>

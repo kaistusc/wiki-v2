@@ -704,6 +704,45 @@ export async function searchWikiPages(query: string): Promise<any[]> {
   return withoutDeletedResults;
 }
 
+export async function fetchAllPagesWithContent(): Promise<any[]> {
+  const listRes = await gql(`
+    query {
+      pages {
+        list(limit: 5000) {
+          id
+          path
+          title
+        }
+      }
+    }
+  `);
+
+  const rawPages = listRes?.data?.pages?.list ?? [];
+  const validPages = rawPages.filter((page: any) => !page.path.startsWith('__trash__/'));
+
+  const pagesWithContent = await Promise.all(
+    validPages.map(async (page: any) => {
+      const singleRes = await gql(
+        `
+        query ($id: Int!) {
+          pages {
+            single(id: $id) {
+              content
+            }
+          }
+        }
+      `,
+        { id: page.id }
+      );
+
+      return {
+        ...page,
+        content: singleRes?.data?.pages?.single?.content || '',
+      };
+    })
+  );
+
+  return pagesWithContent;
 // 역사 보기
 export type WikiPageHistoryItem = {
   versionId: number;
