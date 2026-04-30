@@ -128,6 +128,34 @@ function formatHistoryDate(versionDate: string) {
   });
 }
 
+function formatByteDiff(byteDiff?: number | null) {
+  if (byteDiff === null || byteDiff === undefined) {
+    return null;
+  }
+
+  if (byteDiff > 0) {
+    return `+${byteDiff}`;
+  }
+
+  return String(byteDiff);
+}
+
+function getByteDiffColorClass(byteDiff?: number | null) {
+  if (byteDiff === null || byteDiff === undefined) {
+    return 'text-gray-500';
+  }
+
+  if (byteDiff > 0) {
+    return 'text-green-600';
+  }
+
+  if (byteDiff < 0) {
+    return 'text-red-600';
+  }
+
+  return 'text-gray-500';
+}
+
 function getDisplayDate(item: HistoryItemWithDisplay) {
   return item.displayDate ?? item.versionDate;
 }
@@ -791,6 +819,20 @@ export default function HistoryView({
 
                       {item.isMinor && (
                         <span className="font-semibold text-gray-500">. . 잔글</span>
+                      )}
+
+                      {item.byteSize !== null && item.byteSize !== undefined && (
+                        <span className="text-gray-700">. . ({item.byteSize} 바이트)</span>
+                      )}
+
+                      {item.byteDiff !== null && item.byteDiff !== undefined && (
+                        <span
+                          className={['font-semibold', getByteDiffColorClass(item.byteDiff)].join(
+                            ' '
+                          )}
+                        >
+                          ({formatByteDiff(item.byteDiff)})
+                        </span>
                       )}
 
                       <span

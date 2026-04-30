@@ -20,6 +20,10 @@ async function gql(query: string, variables?: any) {
   return res.json();
 }
 
+function getUtf8ByteLength(value: string | null | undefined) {
+  return new TextEncoder().encode(value ?? '').length;
+}
+
 export async function getWikiPage(path: string, locale = 'en') {
   const data = await gql(
     `
@@ -48,6 +52,12 @@ type WikiPage = {
 export type WikiRevisionMetaInput = {
   editMessage?: string | null;
   isMinor?: boolean;
+
+  /**
+   * 신규 문서 생성처럼 byte diff 기준 content를 직접 지정하고 싶을 때 사용.
+   * 예: 신규 문서는 placeholder 기준이 아니라 빈 문자열 기준으로 diff 계산.
+   */
+  previousContentForByteDiff?: string | null;
 };
 
 export async function fetchAllPages(): Promise<WikiPage[]> {
@@ -60,13 +70,13 @@ export async function fetchAllPages(): Promise<WikiPage[]> {
     body: JSON.stringify({
       query: `
         query ($locale: String!) {
-            pages {
+          pages {
             list(locale: $locale, orderBy: PATH) {
-                id
-                path
-                title
+              id
+              path
+              title
             }
-            }
+          }
         }
         `,
       variables: {
@@ -111,6 +121,8 @@ export async function saveWikiRevisionMeta({
   authorName,
   editMessage,
   isMinor = false,
+  byteSize,
+  byteDiff,
 }: {
   pageId: number;
   versionId: number;
@@ -118,6 +130,8 @@ export async function saveWikiRevisionMeta({
   authorName?: string | null;
   editMessage?: string | null;
   isMinor?: boolean;
+  byteSize?: number | null;
+  byteDiff?: number | null;
 }) {
   const client = await pool.connect();
 
@@ -125,15 +139,26 @@ export async function saveWikiRevisionMeta({
     await client.query(
       `
       INSERT INTO wiki_revision_meta
-        (page_id, version_id, author_id, author_name, edit_message, is_minor)
+        (
+          page_id,
+          version_id,
+          author_id,
+          author_name,
+          edit_message,
+          is_minor,
+          byte_size,
+          byte_diff
+        )
       VALUES
-        ($1, $2, $3, $4, $5, $6)
+        ($1, $2, $3, $4, $5, $6, $7, $8)
       ON CONFLICT (page_id, version_id)
       DO UPDATE SET
         author_id = EXCLUDED.author_id,
         author_name = EXCLUDED.author_name,
         edit_message = EXCLUDED.edit_message,
         is_minor = EXCLUDED.is_minor,
+        byte_size = EXCLUDED.byte_size,
+        byte_diff = EXCLUDED.byte_diff,
         updated_at = NOW()
       `,
       [
@@ -143,6 +168,8 @@ export async function saveWikiRevisionMeta({
         authorName?.trim() || null,
         editMessage?.trim() || null,
         isMinor,
+        byteSize ?? null,
+        byteDiff ?? null,
       ]
     );
   } finally {
@@ -250,9 +277,24 @@ export async function updateWikiPageWithPath(
 
   const previousLatestVersionId = beforeHistory?.trail[0]?.versionId ?? null;
 
+  let previousContentForByteDiff = revisionMeta?.previousContentForByteDiff;
+
+  if (revisionMeta && previousContentForByteDiff === undefined) {
+    const beforePageRes = await getPageContentById(id);
+    previousContentForByteDiff = beforePageRes?.data?.pages?.single?.content ?? '';
+  }
+
+  const byteSize = revisionMeta ? getUtf8ByteLength(content) : null;
+  const byteDiff =
+    revisionMeta && byteSize !== null
+      ? byteSize - getUtf8ByteLength(previousContentForByteDiff)
+      : null;
+
   console.log('[updateWikiPageWithPath] BEFORE history:', {
     id,
     previousLatestVersionId,
+    byteSize,
+    byteDiff,
     history: beforeHistory ? summarizeHistory(beforeHistory) : null,
   });
 
@@ -338,6 +380,8 @@ export async function updateWikiPageWithPath(
         previousLatestVersionId,
         editMessage: revisionMeta.editMessage,
         isMinor: revisionMeta.isMinor,
+        byteSize,
+        byteDiff,
       });
 
       return updateRes;
@@ -350,6 +394,8 @@ export async function updateWikiPageWithPath(
       authorName: newRevision.authorName ?? null,
       editMessage: revisionMeta.editMessage,
       isMinor: revisionMeta.isMinor ?? false,
+      byteSize,
+      byteDiff,
     });
 
     const afterMetas = await getWikiRevisionMetas(id);
@@ -486,6 +532,7 @@ export async function createWikiPage(title: string, path: string, content: strin
   const updateRes = await updateWikiPageWithPath(createdPage.id, title, content, path, locale, {
     editMessage: '신규 문서 생성',
     isMinor: false,
+    previousContentForByteDiff: '',
   });
 
   const historyAfterUpdate = await getRawWikiPageHistory(createdPage.id, 0, 10);
@@ -670,6 +717,9 @@ export type WikiPageHistoryItem = {
   editMessage?: string | null;
   isMinor?: boolean;
 
+  byteSize?: number | null;
+  byteDiff?: number | null;
+
   displayDate?: string;
   displayAuthorId?: number | null;
   displayAuthorName?: string | null;
@@ -708,6 +758,8 @@ export async function getWikiRevisionMetas(pageId: number): Promise<
     authorName: string | null;
     editMessage: string | null;
     isMinor: boolean;
+    byteSize: number | null;
+    byteDiff: number | null;
     createdAt: string;
     updatedAt: string;
   }[]
@@ -724,6 +776,8 @@ export async function getWikiRevisionMetas(pageId: number): Promise<
         author_name,
         edit_message,
         is_minor,
+        byte_size,
+        byte_diff,
         created_at,
         updated_at
       FROM wiki_revision_meta
@@ -740,6 +794,8 @@ export async function getWikiRevisionMetas(pageId: number): Promise<
       authorName: row.author_name,
       editMessage: row.edit_message,
       isMinor: row.is_minor,
+      byteSize: row.byte_size,
+      byteDiff: row.byte_diff,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     }));
@@ -836,17 +892,7 @@ export async function getWikiPageHistory(
 
   const rawTrail = rawHistory.trail;
 
-  /**
-   * Wiki.js history의 author가 한 칸씩 밀려서 내려오는 문제 보정.
-   *
-   * 기존 Wiki.js author 목록:
-   * [row0.author, row1.author, row2.author, ...]
-   *
-   * 실제 표시해야 하는 author 목록:
-   * [currentPage.author, row0.author, row1.author, ...]
-   *
-   * 즉 마지막 author는 버리고, current page의 최신 author를 앞에 붙인다.
-   */
+  //마지막 author는 버리고, current page의 최신 author를 앞에 붙인다.
   const shiftedAuthors = [
     {
       authorId: currentAuthor.authorId,
@@ -868,8 +914,8 @@ export async function getWikiPageHistory(
       editMessage: meta?.editMessage ?? null,
       isMinor: meta?.isMinor ?? false,
 
-      // 날짜도 meta 저장 시각을 우선 사용하고 싶으면 유지.
-      // Wiki.js 날짜를 그대로 쓰고 싶으면 item.versionDate로 바꿔도 됨.
+      byteSize: meta?.byteSize ?? null,
+      byteDiff: meta?.byteDiff ?? null,
       displayDate: meta?.createdAt ?? item.versionDate,
 
       // authorName은 Wiki.js row를 한 칸 보정한 값 사용.
