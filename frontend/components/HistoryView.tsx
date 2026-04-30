@@ -6,6 +6,7 @@ import type { WikiPageHistory } from '@/lib/wiki';
 import { renderWikiLinks } from '@/lib/wikiLinks';
 
 import MarkdownViewer from './MarkdownViewer';
+import TableOfContents from './TableOfContents';
 
 type WikiPageSummary = {
   id: number;
@@ -125,7 +126,9 @@ function VersionPreview({
 
   const pageByTitle = new Map(allPages.map((p) => [p.title, { title: p.title, path: p.path }]));
 
-  const html = renderWikiLinks(version.content, pageById, pageByTitle);
+  const renderedContent = renderWikiLinks(version.content, pageById, pageByTitle);
+
+  console.log({ version });
 
   return (
     <div className="max-w-6xl mx-auto px-6 py-6">
@@ -144,7 +147,11 @@ function VersionPreview({
         </p>
       </div>
 
-      <MarkdownViewer content={html} />
+      <div className="flex flex-col gap-8 lg:flex-row">
+        <article className="order-2 min-w-0 flex-1 prose prose-slate max-w-none text-gray-800 leading-relaxed text-[16px] lg:order-1">
+          <MarkdownViewer content={renderedContent} />
+        </article>
+      </div>
     </div>
   );
 }
@@ -251,6 +258,7 @@ export default function HistoryView({
   }
 
   if (selectedVersion) {
+    console.log('selectedVersion:', selectedVersion);
     return (
       <VersionPreview
         version={selectedVersion}
