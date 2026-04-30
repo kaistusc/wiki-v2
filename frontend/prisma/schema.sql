@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS uploads (
   path TEXT NOT NULL,
   url TEXT NOT NULL,
 
-  created_at TIMESTAMP DEFAULT NOW()
+  created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS wiki_revision_meta (
@@ -20,16 +20,21 @@ CREATE TABLE IF NOT EXISTS wiki_revision_meta (
 
   page_id INTEGER NOT NULL,
   version_id INTEGER NOT NULL,
+
   author_id INTEGER,
+  author_name TEXT,
 
   edit_message TEXT,
   is_minor BOOLEAN NOT NULL DEFAULT FALSE,
 
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW(),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
 
   UNIQUE (page_id, version_id)
 );
+
+ALTER TABLE wiki_revision_meta
+ADD COLUMN IF NOT EXISTS author_name TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_wiki_revision_meta_page_id
   ON wiki_revision_meta (page_id);
@@ -39,6 +44,3 @@ CREATE INDEX IF NOT EXISTS idx_wiki_revision_meta_version_id
 
 CREATE INDEX IF NOT EXISTS idx_wiki_revision_meta_author_id
   ON wiki_revision_meta (author_id);
-
-CREATE INDEX IF NOT EXISTS idx_wiki_revision_meta_created_at
-  ON wiki_revision_meta (created_at DESC);

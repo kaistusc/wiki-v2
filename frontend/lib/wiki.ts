@@ -84,54 +84,147 @@ export async function fetchAllPages(): Promise<WikiPage[]> {
   return availablePages as WikiPage[];
 }
 
+async function getLatestWikiRevisionWithRetry(
+  pageId: number,
+  maxAttempts = 10,
+  delayMs = 300
+): Promise<WikiPageHistoryItem | null> {
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const history = await getRawWikiPageHistory(pageId, 0, 1);
+    const latestRevision = history.trail[0];
+
+    if (latestRevision) {
+      return latestRevision;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
+  }
+
+  return null;
+}
+
 // 메타 정보를 포함하여 변경사항을 저장
 export async function saveWikiRevisionMeta({
   pageId,
   versionId,
   authorId,
+  authorName,
   editMessage,
   isMinor = false,
 }: {
   pageId: number;
   versionId: number;
   authorId: number | null;
+  authorName?: string | null;
   editMessage?: string | null;
   isMinor?: boolean;
 }) {
   const client = await pool.connect();
 
   try {
-    console.log('[saveWikiRevisionMeta] saving:', {
-      pageId,
-      versionId,
-      authorId,
-      editMessage,
-      isMinor,
-    });
-
     await client.query(
       `
       INSERT INTO wiki_revision_meta
-        (page_id, version_id, author_id, edit_message, is_minor)
+        (page_id, version_id, author_id, author_name, edit_message, is_minor)
       VALUES
-        ($1, $2, $3, $4, $5)
+        ($1, $2, $3, $4, $5, $6)
       ON CONFLICT (page_id, version_id)
       DO UPDATE SET
         author_id = EXCLUDED.author_id,
+        author_name = EXCLUDED.author_name,
         edit_message = EXCLUDED.edit_message,
         is_minor = EXCLUDED.is_minor,
         updated_at = NOW()
       `,
-      [pageId, versionId, authorId, editMessage?.trim() || null, isMinor]
+      [
+        pageId,
+        versionId,
+        authorId,
+        authorName?.trim() || null,
+        editMessage?.trim() || null,
+        isMinor,
+      ]
     );
-
-    console.log('[saveWikiRevisionMeta] saved');
-  } catch (error) {
-    console.error('[saveWikiRevisionMeta] failed:', error);
-    throw error;
   } finally {
     client.release();
   }
+}
+
+function summarizeHistory(history: { total: number; trail: WikiPageHistoryItem[] }) {
+  return {
+    total: history.total,
+    trail: history.trail.map((item) => ({
+      versionId: item.versionId,
+      actionType: item.actionType,
+      versionDate: item.versionDate,
+      authorId: item.authorId,
+      authorName: item.authorName,
+      valueBefore: item.valueBefore,
+      valueAfter: item.valueAfter,
+    })),
+  };
+}
+
+async function sleep(ms: number) {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitForRevisionAfterUpdate({
+  pageId,
+  previousLatestVersionId,
+  maxAttempts = 15,
+  delayMs = 400,
+}: {
+  pageId: number;
+  previousLatestVersionId: number | null;
+  maxAttempts?: number;
+  delayMs?: number;
+}): Promise<WikiPageHistoryItem | null> {
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const history = await getRawWikiPageHistory(pageId, 0, 10);
+
+    console.log('[waitForRevisionAfterUpdate] attempt:', {
+      pageId,
+      attempt,
+      previousLatestVersionId,
+      history: summarizeHistory(history),
+    });
+
+    const latest = history.trail[0];
+
+    if (!latest) {
+      await sleep(delayMs);
+      continue;
+    }
+
+    if (previousLatestVersionId === null) {
+      console.log('[waitForRevisionAfterUpdate] picked latest because previous is null:', latest);
+      return latest;
+    }
+
+    if (latest.versionId !== previousLatestVersionId) {
+      console.log('[waitForRevisionAfterUpdate] picked new latest:', latest);
+      return latest;
+    }
+
+    const changed = history.trail.find((item) => item.versionId !== previousLatestVersionId);
+
+    if (changed) {
+      console.log('[waitForRevisionAfterUpdate] picked changed revision:', changed);
+      return changed;
+    }
+
+    await sleep(delayMs);
+  }
+
+  console.error('[waitForRevisionAfterUpdate] failed to find new revision:', {
+    pageId,
+    previousLatestVersionId,
+    maxAttempts,
+    delayMs,
+  });
+
+  return null;
 }
 
 export async function updateWikiPageWithPath(
@@ -142,11 +235,26 @@ export async function updateWikiPageWithPath(
   locale = 'en',
   revisionMeta?: WikiRevisionMetaInput
 ) {
-  const previousRawHistory = revisionMeta ? await getRawWikiPageHistory(id, 0, 1) : null;
+  console.log('[updateWikiPageWithPath] CALLED:', {
+    id,
+    title,
+    path,
+    locale,
+    hasRevisionMeta: Boolean(revisionMeta),
+    revisionMeta,
+    contentLength: content.length,
+    contentPreview: content.slice(0, 120),
+  });
 
-  const previousLatestVersionId = previousRawHistory?.trail[0]?.versionId ?? null;
+  const beforeHistory = revisionMeta ? await getRawWikiPageHistory(id, 0, 10) : null;
 
-  const hadNoRawHistoryBeforeUpdate = revisionMeta ? previousRawHistory?.trail.length === 0 : false;
+  const previousLatestVersionId = beforeHistory?.trail[0]?.versionId ?? null;
+
+  console.log('[updateWikiPageWithPath] BEFORE history:', {
+    id,
+    previousLatestVersionId,
+    history: beforeHistory ? summarizeHistory(beforeHistory) : null,
+  });
 
   const updateRes = await gql(
     `
@@ -178,11 +286,6 @@ export async function updateWikiPageWithPath(
             succeeded
             message
           }
-          page {
-            id
-            path
-            locale
-          }
         }
       }
     }
@@ -200,36 +303,106 @@ export async function updateWikiPageWithPath(
     }
   );
 
+  console.log('[updateWikiPageWithPath] updateRes:', JSON.stringify(updateRes, null, 2));
+
   const result = updateRes?.data?.pages?.update?.responseResult;
-  console.log('[updateWikiPageWithPath] update result:', result);
 
   if (!result?.succeeded) {
+    console.error('[updateWikiPageWithPath] update failed:', {
+      result,
+      errors: updateRes?.errors,
+    });
     return updateRes;
   }
 
+  if (updateRes?.errors?.length) {
+    console.warn(
+      '[updateWikiPageWithPath] GraphQL returned errors but update succeeded:',
+      updateRes.errors
+    );
+  }
+
   if (revisionMeta) {
-    const latestHistory = await getRawWikiPageHistory(id, 0, 5);
+    const newRevision = await waitForRevisionAfterUpdate({
+      pageId: id,
+      previousLatestVersionId,
+      maxAttempts: 15,
+      delayMs: 400,
+    });
 
-    const newRevision =
-      latestHistory.trail.find((item) => item.versionId !== previousLatestVersionId) ??
-      latestHistory.trail[0];
+    console.log('[updateWikiPageWithPath] newRevision selected:', newRevision);
 
-    if (newRevision) {
-      await saveWikiRevisionMeta({
+    if (!newRevision) {
+      console.error('[updateWikiPageWithPath] latest revision not found, meta not saved:', {
         pageId: id,
-        versionId: newRevision.versionId,
-        authorId: newRevision.authorId ?? null,
+        previousLatestVersionId,
         editMessage: revisionMeta.editMessage,
-        isMinor: revisionMeta.isMinor ?? false,
+        isMinor: revisionMeta.isMinor,
       });
+
+      return updateRes;
     }
+
+    await saveWikiRevisionMeta({
+      pageId: id,
+      versionId: newRevision.versionId,
+      authorId: newRevision.authorId ?? null,
+      authorName: newRevision.authorName ?? null,
+      editMessage: revisionMeta.editMessage,
+      isMinor: revisionMeta.isMinor ?? false,
+    });
+
+    const afterMetas = await getWikiRevisionMetas(id);
+    console.log('[updateWikiPageWithPath] metas after save:', afterMetas);
   }
 
   return updateRes;
 }
 
+async function waitForNewWikiRevision({
+  pageId,
+  previousLatestVersionId,
+  preferNonInitial = false,
+  maxAttempts = 10,
+  delayMs = 300,
+}: {
+  pageId: number;
+  previousLatestVersionId: number | null;
+  preferNonInitial?: boolean;
+  maxAttempts?: number;
+  delayMs?: number;
+}): Promise<WikiPageHistoryItem | null> {
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const history = await getRawWikiPageHistory(pageId, 0, 10);
+
+    const changedRevisions = history.trail.filter(
+      (item) => item.versionId !== previousLatestVersionId
+    );
+
+    const preferredRevision = preferNonInitial
+      ? changedRevisions.find((item) => item.actionType !== 'initial')
+      : changedRevisions[0];
+
+    if (preferredRevision) {
+      return preferredRevision;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
+  }
+
+  return null;
+}
+
 export async function createWikiPage(title: string, path: string, content: string, locale = 'en') {
   const placeholderContent = '<!-- initial placeholder -->';
+
+  console.log('[createWikiPage] CALLED:', {
+    title,
+    path,
+    locale,
+    contentLength: content.length,
+    contentPreview: content.slice(0, 120),
+  });
 
   const createRes = await gql(
     `
@@ -279,6 +452,8 @@ export async function createWikiPage(title: string, path: string, content: strin
     }
   );
 
+  console.log('[createWikiPage] createRes:', JSON.stringify(createRes, null, 2));
+
   if (createRes?.errors?.length) {
     console.error('[createWikiPage] GraphQL errors:', createRes.errors);
     return createRes;
@@ -287,14 +462,41 @@ export async function createWikiPage(title: string, path: string, content: strin
   const result = createRes?.data?.pages?.create?.responseResult;
   const createdPage = createRes?.data?.pages?.create?.page;
 
+  console.log('[createWikiPage] result:', result);
+  console.log('[createWikiPage] createdPage:', createdPage);
+
   if (!result?.succeeded || !createdPage?.id) {
+    console.error('[createWikiPage] create failed or page id missing:', {
+      result,
+      createdPage,
+    });
+
     return createRes;
   }
 
-  await updateWikiPageWithPath(createdPage.id, title, content, path, locale, {
+  const historyAfterCreate = await getRawWikiPageHistory(createdPage.id, 0, 10);
+
+  console.log('[createWikiPage] history immediately after create:', {
+    pageId: createdPage.id,
+    history: summarizeHistory(historyAfterCreate),
+  });
+
+  console.log('[createWikiPage] now update placeholder page with real content');
+
+  const updateRes = await updateWikiPageWithPath(createdPage.id, title, content, path, locale, {
     editMessage: '신규 문서 생성',
     isMinor: false,
   });
+
+  const historyAfterUpdate = await getRawWikiPageHistory(createdPage.id, 0, 10);
+  const metasAfterUpdate = await getWikiRevisionMetas(createdPage.id);
+
+  console.log('[createWikiPage] history after update:', {
+    pageId: createdPage.id,
+    history: summarizeHistory(historyAfterUpdate),
+  });
+
+  console.log('[createWikiPage] metas after update:', metasAfterUpdate);
 
   return createRes;
 }
@@ -349,20 +551,34 @@ export async function updatePageAndChildren(
 }
 
 export async function getPageContentById(id: number) {
-  return gql(
+  const res = await gql(
     `
     query ($id: Int!) {
       pages {
         single(id: $id) {
           id
           title
+          path
           content
+          render
+          createdAt
+          updatedAt
+          authorId
+          authorName
         }
       }
     }
     `,
     { id }
   );
+
+  if (res?.errors?.length) {
+    console.error('[getPageContentById] GraphQL errors:', res.errors);
+  }
+
+  console.log(`[getPageContentById] fetched page ID ${id}:`, res?.data?.pages?.single);
+
+  return res;
 }
 
 export async function deleteWikiPage(pageId: number) {
@@ -453,7 +669,9 @@ export type WikiPageHistoryItem = {
 
   editMessage?: string | null;
   isMinor?: boolean;
-  isSynthetic?: boolean;
+
+  displayDate?: string;
+  displayAuthorName?: string | null;
 };
 
 export type WikiPageVersion = {
@@ -486,6 +704,7 @@ export async function getWikiRevisionMetas(pageId: number): Promise<
     pageId: number;
     versionId: number;
     authorId: number | null;
+    authorName: string | null;
     editMessage: string | null;
     isMinor: boolean;
     createdAt: string;
@@ -501,6 +720,7 @@ export async function getWikiRevisionMetas(pageId: number): Promise<
         page_id,
         version_id,
         author_id,
+        author_name,
         edit_message,
         is_minor,
         created_at,
@@ -516,6 +736,7 @@ export async function getWikiRevisionMetas(pageId: number): Promise<
       pageId: row.page_id,
       versionId: row.version_id,
       authorId: row.author_id,
+      authorName: row.author_name,
       editMessage: row.edit_message,
       isMinor: row.is_minor,
       createdAt: row.created_at,
@@ -560,10 +781,6 @@ async function getRawWikiPageHistory(
     }
   );
 
-  if (res?.errors?.length) {
-    console.error('[getRawWikiPageHistory] GraphQL errors:', res.errors);
-  }
-
   return {
     total: res?.data?.pages?.history?.total ?? 0,
     trail: res?.data?.pages?.history?.trail ?? [],
@@ -591,6 +808,10 @@ export async function getWikiPageHistory(
       ...item,
       editMessage: meta?.editMessage ?? null,
       isMinor: meta?.isMinor ?? false,
+
+      // 목록 표시용 값
+      displayDate: meta?.createdAt ?? item.versionDate,
+      displayAuthorName: meta?.authorName ?? item.authorName,
     };
   });
 

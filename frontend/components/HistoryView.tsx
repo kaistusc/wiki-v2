@@ -6,7 +6,6 @@ import type { WikiPageHistory } from '@/lib/wiki';
 import { renderWikiLinks } from '@/lib/wikiLinks';
 
 import MarkdownViewer from './MarkdownViewer';
-import TableOfContents from './TableOfContents';
 
 type WikiPageSummary = {
   id: number;
@@ -42,6 +41,11 @@ type WikiPageVersion = {
   versionDate: string;
 };
 
+type HistoryItemWithDisplay = WikiPageHistory['trail'][number] & {
+  displayDate?: string;
+  displayAuthorName?: string | null;
+};
+
 function isTrashPath(path: string | null | undefined) {
   return Boolean(path?.startsWith('__trash__/'));
 }
@@ -74,6 +78,7 @@ function getActionLabel(
     case 'restored':
       return '복원';
     case 'updated':
+    case 'edit':
       return '편집';
     default:
       return '편집';
@@ -104,6 +109,14 @@ function formatHistoryDate(versionDate: string) {
   });
 }
 
+function getDisplayDate(item: HistoryItemWithDisplay) {
+  return item.displayDate ?? item.versionDate;
+}
+
+function getDisplayAuthorName(item: HistoryItemWithDisplay) {
+  return item.displayAuthorName ?? item.authorName ?? 'Unknown';
+}
+
 function VersionPreview({
   version,
   onBack,
@@ -127,8 +140,6 @@ function VersionPreview({
   const pageByTitle = new Map(allPages.map((p) => [p.title, { title: p.title, path: p.path }]));
 
   const renderedContent = renderWikiLinks(version.content, pageById, pageByTitle);
-
-  console.log({ version });
 
   return (
     <div className="max-w-6xl mx-auto px-6 py-6">
@@ -167,20 +178,13 @@ export default function HistoryView({
   const [isLoadingVersion, setIsLoadingVersion] = useState(false);
 
   async function handleOpenHistoryItem(versionId: number, index: number) {
-    console.log('[handleOpenHistoryItem]', { versionId, index });
-
     if (!history) return;
 
     try {
       setIsLoadingVersion(true);
 
-      /*
-       * Wiki.js pages.version은 클릭한 row의 "결과물"보다
-       * 한 단계 이전 스냅샷처럼 동작할 수 있어서 보정합니다.
-       *
-       * - 최신 row(index === 0): 현재 live 문서를 보여줌
-       * - 그 외 row: 바로 위 row의 versionId를 조회해서 클릭한 시점의 결과를 보여줌
-       */
+      const clickedItem = history.trail[index] as HistoryItemWithDisplay;
+
       if (index === 0) {
         const res = await fetch(`/api/wiki/current/${pageId}`);
 
@@ -204,11 +208,13 @@ export default function HistoryView({
           tags: [],
           isPrivate: false,
           isPublished: true,
-          authorId: String(currentPage.authorId ?? ''),
-          authorName: currentPage.authorName ?? 'Unknown',
+          authorId: String(currentPage.authorId ?? clickedItem.authorId ?? ''),
+          authorName: getDisplayAuthorName(clickedItem) ?? currentPage.authorName ?? 'Unknown',
           action: 'current',
-          createdAt: currentPage.createdAt ?? new Date().toISOString(),
-          versionDate: currentPage.updatedAt ?? new Date().toISOString(),
+          createdAt:
+            currentPage.createdAt ?? getDisplayDate(clickedItem) ?? new Date().toISOString(),
+          versionDate:
+            getDisplayDate(clickedItem) ?? currentPage.updatedAt ?? new Date().toISOString(),
         });
 
         return;
@@ -229,17 +235,15 @@ export default function HistoryView({
       }
 
       const version: WikiPageVersion = await res.json();
-      const clickedItem = history.trail[index];
 
       setSelectedVersion({
         ...version,
-        /*
-         * 실제 content는 보정된 version에서 가져오고,
-         * 노란 박스의 날짜/작성자는 사용자가 클릭한 row 기준으로 보여줍니다.
-         */
+
+        // content는 보정된 version에서 가져오고,
+        // 노란 박스의 날짜/작성자는 HistoryView에 표시되는 row 기준으로 맞춤.
         versionId,
-        versionDate: clickedItem.versionDate,
-        authorName: clickedItem.authorName,
+        versionDate: getDisplayDate(clickedItem),
+        authorName: getDisplayAuthorName(clickedItem),
       });
     } catch (error) {
       console.error('Failed to open version', error);
@@ -258,7 +262,6 @@ export default function HistoryView({
   }
 
   if (selectedVersion) {
-    console.log('selectedVersion:', selectedVersion);
     return (
       <VersionPreview
         version={selectedVersion}
@@ -318,9 +321,13 @@ export default function HistoryView({
           <p className="mb-2 text-sm text-gray-600">총 {history.total}개의 편집 기록</p>
 
           <ul className="space-y-1 text-sm">
-            {history.trail.map((item, index) => {
+            {history.trail.map((rawItem, index) => {
+              const item = rawItem as HistoryItemWithDisplay;
+
               const isLatest = index === 0;
-              const formattedDate = formatHistoryDate(item.versionDate);
+              const formattedDate = formatHistoryDate(getDisplayDate(item));
+              const displayAuthorName = getDisplayAuthorName(item);
+
               const actionLabel = getActionLabel(
                 item.actionType,
                 item.valueBefore ?? null,
@@ -329,7 +336,7 @@ export default function HistoryView({
 
               return (
                 <li
-                  key={`${item.versionId}-${item.versionDate}`}
+                  key={`${item.versionId}-${getDisplayDate(item)}`}
                   className={[
                     'flex items-start gap-2 border border-dashed border-gray-300 px-2 py-1',
                     isLatest ? 'bg-blue-50' : 'bg-white',
@@ -381,7 +388,7 @@ export default function HistoryView({
                         {formattedDate}
                       </button>
 
-                      <span className="font-semibold text-red-600">{item.authorName}</span>
+                      <span className="font-semibold text-red-600">{displayAuthorName}</span>
 
                       <span className="text-gray-700">(</span>
 
