@@ -58,6 +58,7 @@ export function ClientEditor({
         }
 
         const data: WikiPageHistory = await res.json();
+        console.log('Fetched history data:', data);
 
         setHistory(data);
       } catch (e) {
