@@ -6,6 +6,7 @@ import type { WikiPageHistory } from '@/lib/wiki';
 import { renderWikiLinks } from '@/lib/wikiLinks';
 
 import MarkdownViewer from './MarkdownViewer';
+import VersionDiffView from './VersionDiffView';
 
 type WikiPageSummary = {
   id: number;
@@ -39,11 +40,29 @@ type WikiPageVersion = {
   action: string;
   createdAt: string;
   versionDate: string;
+  editMessage?: string | null;
+  historyIndex: number;
 };
 
 type HistoryItemWithDisplay = WikiPageHistory['trail'][number] & {
   displayDate?: string;
+  displayAuthorId?: number | null;
   displayAuthorName?: string | null;
+};
+
+type DiffNavigationTarget = {
+  versionId: number;
+  index: number;
+};
+
+type DiffVersion = {
+  versionId: number;
+  versionDate: string;
+  authorName: string | null;
+  editMessage?: string | null;
+  content: string;
+  previousVersion?: DiffNavigationTarget | null;
+  nextVersion?: DiffNavigationTarget | null;
 };
 
 function isTrashPath(path: string | null | undefined) {
@@ -117,14 +136,62 @@ function getDisplayAuthorName(item: HistoryItemWithDisplay) {
   return item.displayAuthorName ?? item.authorName ?? 'Unknown';
 }
 
+/**
+ * history.trail은 최신순이라고 가정.
+ *
+ * index가 커질수록 더 오래된 편집.
+ * 따라서:
+ * - previousVersion: 더 오래된 편집 = index + 1
+ * - nextVersion: 더 최신 편집 = index - 1
+ */
+function getPreviousVersionTarget(
+  history: WikiPageHistory,
+  index: number
+): DiffNavigationTarget | null {
+  const previousItem = history.trail[index + 1];
+
+  if (!previousItem) {
+    return null;
+  }
+
+  return {
+    versionId: previousItem.versionId,
+    index: index + 1,
+  };
+}
+
+function getNextVersionTarget(
+  history: WikiPageHistory,
+  index: number
+): DiffNavigationTarget | null {
+  const nextItem = history.trail[index - 1];
+
+  if (!nextItem) {
+    return null;
+  }
+
+  return {
+    versionId: nextItem.versionId,
+    index: index - 1,
+  };
+}
+
 function VersionPreview({
   version,
   onBack,
   allPages,
+  hasPreviousVersion,
+  hasNextVersion,
+  onOpenHistoryIndex,
+  onCompareWithHistoryIndex,
 }: {
   version: WikiPageVersion;
   onBack: () => void;
   allPages: WikiPageSummary[];
+  hasPreviousVersion: boolean;
+  hasNextVersion: boolean;
+  onOpenHistoryIndex: (index: number) => void;
+  onCompareWithHistoryIndex: (index: number) => void;
 }) {
   const formattedDate = new Date(version.versionDate).toLocaleString('ko-KR', {
     year: 'numeric',
@@ -134,6 +201,12 @@ function VersionPreview({
     hour: '2-digit',
     minute: '2-digit',
   });
+
+  const currentIndex = version.historyIndex;
+  const previousIndex = currentIndex + 1;
+  const nextIndex = currentIndex - 1;
+  const latestIndex = 0;
+  const isLatest = currentIndex === latestIndex;
 
   const pageById = new Map(allPages.map((p) => [p.id, { title: p.title, path: p.path }]));
 
@@ -149,7 +222,90 @@ function VersionPreview({
         <p>
           <span className="font-semibold text-blue-700">{version.authorName}</span>
           님의 {formattedDate} 판
+          {version.editMessage ? (
+            <span className="text-gray-700"> ({version.editMessage})</span>
+          ) : null}
         </p>
+
+        <div className="mt-1 flex flex-wrap items-center gap-x-1 text-sm">
+          {hasPreviousVersion ? (
+            <>
+              <button
+                type="button"
+                onClick={() => onCompareWithHistoryIndex(previousIndex)}
+                className="text-blue-600 hover:underline"
+              >
+                (차이)
+              </button>
+
+              <button
+                type="button"
+                onClick={() => onOpenHistoryIndex(previousIndex)}
+                className="text-blue-600 hover:underline"
+              >
+                ← 이전 판
+              </button>
+            </>
+          ) : (
+            <>
+              <span className="text-gray-400">(차이)</span>
+              <span className="text-gray-400">← 이전 판</span>
+            </>
+          )}
+
+          <span className="text-gray-700">|</span>
+
+          {isLatest ? (
+            <span className="font-semibold text-gray-700">최신판</span>
+          ) : (
+            <button
+              type="button"
+              onClick={() => onOpenHistoryIndex(latestIndex)}
+              className="text-blue-600 hover:underline"
+            >
+              최신판
+            </button>
+          )}
+
+          {!isLatest ? (
+            <button
+              type="button"
+              onClick={() => onCompareWithHistoryIndex(latestIndex)}
+              className="text-blue-600 hover:underline"
+            >
+              (차이)
+            </button>
+          ) : (
+            <span className="text-gray-400">(차이)</span>
+          )}
+
+          <span className="text-gray-700">|</span>
+
+          {hasNextVersion ? (
+            <>
+              <button
+                type="button"
+                onClick={() => onOpenHistoryIndex(nextIndex)}
+                className="text-blue-600 hover:underline"
+              >
+                다음 판 →
+              </button>
+
+              <button
+                type="button"
+                onClick={() => onCompareWithHistoryIndex(nextIndex)}
+                className="text-blue-600 hover:underline"
+              >
+                (차이)
+              </button>
+            </>
+          ) : (
+            <>
+              <span className="text-gray-400">다음 판 →</span>
+              <span className="text-gray-400">(차이)</span>
+            </>
+          )}
+        </div>
 
         <p className="mt-1">
           <button type="button" onClick={onBack} className="text-blue-600 hover:underline">
@@ -176,6 +332,16 @@ export default function HistoryView({
 }: HistoryViewProps) {
   const [selectedVersion, setSelectedVersion] = useState<WikiPageVersion | null>(null);
   const [isLoadingVersion, setIsLoadingVersion] = useState(false);
+
+  const [selectedNewerIndex, setSelectedNewerIndex] = useState(0);
+  const [selectedOlderIndex, setSelectedOlderIndex] = useState(1);
+
+  const [diffVersions, setDiffVersions] = useState<{
+    oldVersion: DiffVersion;
+    newVersion: DiffVersion;
+  } | null>(null);
+
+  const [isLoadingDiff, setIsLoadingDiff] = useState(false);
 
   async function handleOpenHistoryItem(versionId: number, index: number) {
     if (!history) return;
@@ -215,6 +381,8 @@ export default function HistoryView({
             currentPage.createdAt ?? getDisplayDate(clickedItem) ?? new Date().toISOString(),
           versionDate:
             getDisplayDate(clickedItem) ?? currentPage.updatedAt ?? new Date().toISOString(),
+          editMessage: clickedItem.editMessage ?? null,
+          historyIndex: index,
         });
 
         return;
@@ -238,12 +406,11 @@ export default function HistoryView({
 
       setSelectedVersion({
         ...version,
-
-        // content는 보정된 version에서 가져오고,
-        // 노란 박스의 날짜/작성자는 HistoryView에 표시되는 row 기준으로 맞춤.
         versionId,
         versionDate: getDisplayDate(clickedItem),
         authorName: getDisplayAuthorName(clickedItem),
+        editMessage: clickedItem.editMessage ?? null,
+        historyIndex: index,
       });
     } catch (error) {
       console.error('Failed to open version', error);
@@ -251,6 +418,186 @@ export default function HistoryView({
     } finally {
       setIsLoadingVersion(false);
     }
+  }
+
+  async function fetchContentForHistoryIndex(index: number): Promise<DiffVersion> {
+    if (!history) {
+      throw new Error('History is not loaded.');
+    }
+
+    const item = history.trail[index] as HistoryItemWithDisplay;
+
+    if (!item) {
+      throw new Error(`Invalid history index: ${index}`);
+    }
+
+    const base = {
+      versionId: item.versionId,
+      versionDate: getDisplayDate(item),
+      authorName: getDisplayAuthorName(item),
+      editMessage: item.editMessage ?? null,
+      previousVersion: getPreviousVersionTarget(history, index),
+      nextVersion: getNextVersionTarget(history, index),
+    };
+
+    if (index === 0) {
+      const res = await fetch(`/api/wiki/current/${pageId}`);
+
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Failed to fetch current page: ${res.status} ${text}`);
+      }
+
+      const currentPage = await res.json();
+
+      return {
+        ...base,
+        authorName: getDisplayAuthorName(item) ?? currentPage.authorName ?? 'Unknown',
+        content: currentPage.content ?? '',
+      };
+    }
+
+    /**
+     * Wiki.js pages.version은 선택한 row 자체가 아니라
+     * 바로 위 row의 versionId로 조회해야 해당 row 시점의 content가 나옴.
+     */
+    const versionProvider = history.trail[index - 1];
+
+    if (!versionProvider?.versionId || versionProvider.versionId <= 0) {
+      throw new Error('This version cannot be opened.');
+    }
+
+    const res = await fetch(`/api/wiki/version/${pageId}/${versionProvider.versionId}`);
+
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Failed to fetch version: ${res.status} ${text}`);
+    }
+
+    const version: WikiPageVersion = await res.json();
+
+    return {
+      ...base,
+      authorName: getDisplayAuthorName(item) ?? version.authorName ?? 'Unknown',
+      content: version.content ?? '',
+    };
+  }
+
+  async function compareHistoryIndexes(firstIndex: number, secondIndex: number) {
+    if (!history) return;
+
+    if (firstIndex === secondIndex) {
+      alert('같은 판끼리는 비교할 수 없습니다.');
+      return;
+    }
+
+    const newerIndex = Math.min(firstIndex, secondIndex);
+    const olderIndex = Math.max(firstIndex, secondIndex);
+
+    try {
+      setIsLoadingDiff(true);
+      setSelectedVersion(null);
+
+      const [oldVersion, newVersion] = await Promise.all([
+        fetchContentForHistoryIndex(olderIndex),
+        fetchContentForHistoryIndex(newerIndex),
+      ]);
+
+      setDiffVersions({
+        oldVersion,
+        newVersion,
+      });
+    } catch (error) {
+      console.error('Failed to compare versions', error);
+      alert('선택한 두 판을 비교하지 못했습니다.');
+    } finally {
+      setIsLoadingDiff(false);
+    }
+  }
+
+  async function handleCompareSelectedVersions() {
+    await compareHistoryIndexes(selectedNewerIndex, selectedOlderIndex);
+  }
+
+  function handleOpenVersionFromDiff(versionId: number) {
+    if (!history) return;
+
+    const index = history.trail.findIndex((item) => item.versionId === versionId);
+
+    if (index < 0) {
+      alert('해당 판을 찾을 수 없습니다.');
+      return;
+    }
+
+    setDiffVersions(null);
+    void handleOpenHistoryItem(versionId, index);
+  }
+
+  async function handleMoveOlderSideFromDiff(target: DiffNavigationTarget) {
+    if (!diffVersions) return;
+
+    try {
+      setIsLoadingDiff(true);
+
+      const oldVersion = await fetchContentForHistoryIndex(target.index);
+
+      setDiffVersions({
+        oldVersion,
+        newVersion: diffVersions.newVersion,
+      });
+    } catch (error) {
+      console.error('Failed to move older side in diff', error);
+      alert('이전 편집과의 비교를 불러오지 못했습니다.');
+    } finally {
+      setIsLoadingDiff(false);
+    }
+  }
+
+  async function handleMoveNewerSideFromDiff(target: DiffNavigationTarget) {
+    if (!diffVersions) return;
+
+    try {
+      setIsLoadingDiff(true);
+
+      const newVersion = await fetchContentForHistoryIndex(target.index);
+
+      setDiffVersions({
+        oldVersion: diffVersions.oldVersion,
+        newVersion,
+      });
+    } catch (error) {
+      console.error('Failed to move newer side in diff', error);
+      alert('다음 편집과의 비교를 불러오지 못했습니다.');
+    } finally {
+      setIsLoadingDiff(false);
+    }
+  }
+
+  if (isLoadingDiff) {
+    return (
+      <div className="max-w-6xl mx-auto px-6 py-6 text-sm text-gray-500">
+        선택한 두 판을 비교하는 중...
+      </div>
+    );
+  }
+
+  if (diffVersions) {
+    return (
+      <VersionDiffView
+        pageTitle={pageTitle}
+        oldVersion={diffVersions.oldVersion}
+        newVersion={diffVersions.newVersion}
+        allPages={allPages}
+        onBack={() => setDiffVersions(null)}
+        onOpenVersion={handleOpenVersionFromDiff}
+        onMoveOlderSide={(target) => {
+          void handleMoveOlderSideFromDiff(target);
+        }}
+        onMoveNewerSide={(target) => {
+          void handleMoveNewerSideFromDiff(target);
+        }}
+      />
+    );
   }
 
   if (isLoadingVersion) {
@@ -262,11 +609,28 @@ export default function HistoryView({
   }
 
   if (selectedVersion) {
+    const currentIndex = selectedVersion.historyIndex;
+
     return (
       <VersionPreview
         version={selectedVersion}
         onBack={() => setSelectedVersion(null)}
         allPages={allPages}
+        hasPreviousVersion={Boolean(history?.trail[currentIndex + 1])}
+        hasNextVersion={Boolean(history?.trail[currentIndex - 1])}
+        onOpenHistoryIndex={(index) => {
+          const item = history?.trail[index];
+
+          if (!item) {
+            alert('해당 판을 찾을 수 없습니다.');
+            return;
+          }
+
+          void handleOpenHistoryItem(item.versionId, index);
+        }}
+        onCompareWithHistoryIndex={(targetIndex) => {
+          void compareHistoryIndexes(currentIndex, targetIndex);
+        }}
       />
     );
   }
@@ -301,6 +665,9 @@ export default function HistoryView({
 
       <button
         type="button"
+        onClick={() => {
+          void handleCompareSelectedVersions();
+        }}
         className="mb-3 rounded border border-gray-400 bg-white px-3 py-2 text-sm hover:bg-gray-100"
       >
         선택한 판을 비교하기
@@ -351,16 +718,32 @@ export default function HistoryView({
                       {isLatest ? (
                         <span className="font-semibold text-gray-700">최신</span>
                       ) : (
-                        <button type="button" className="text-blue-600 hover:underline">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void compareHistoryIndexes(index, 0);
+                          }}
+                          className="text-blue-600 hover:underline"
+                        >
                           최신
                         </button>
                       )}
 
                       <span className="text-gray-700">|</span>
 
-                      <button type="button" className="text-blue-600 hover:underline">
-                        이전
-                      </button>
+                      {history.trail[index + 1] ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void compareHistoryIndexes(index, index + 1);
+                          }}
+                          className="text-blue-600 hover:underline"
+                        >
+                          이전
+                        </button>
+                      ) : (
+                        <span className="text-gray-400">이전</span>
+                      )}
 
                       <span className="text-gray-700">)</span>
 
@@ -368,14 +751,16 @@ export default function HistoryView({
                         type="radio"
                         name="history-newer"
                         className="mx-1 h-3 w-3"
-                        defaultChecked={index === 0}
+                        checked={selectedNewerIndex === index}
+                        onChange={() => setSelectedNewerIndex(index)}
                       />
 
                       <input
                         type="radio"
                         name="history-older"
                         className="mx-1 h-3 w-3"
-                        defaultChecked={index === 1}
+                        checked={selectedOlderIndex === index}
+                        onChange={() => setSelectedOlderIndex(index)}
                       />
 
                       <button
