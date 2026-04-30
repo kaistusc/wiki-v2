@@ -113,6 +113,26 @@ async function getLatestWikiRevisionWithRetry(
   return null;
 }
 
+export async function fetchAllPagesForLogs() {
+  const client = await pool.connect();
+
+  try {
+    const result = await client.query(`
+      SELECT id, title, path
+      FROM pages
+      ORDER BY "updatedAt" DESC
+    `);
+
+    return result.rows.map((row) => ({
+      id: row.id,
+      title: row.title,
+      path: row.path,
+    }));
+  } finally {
+    client.release();
+  }
+}
+
 // 메타 정보를 포함하여 변경사항을 저장
 export async function saveWikiRevisionMeta({
   pageId,
@@ -845,109 +865,176 @@ export async function getWikiEditLogs(
     to?: string;
   }
 ) {
-  const offset = (page - 1) * limit;
+  const allPages = await fetchAllPagesForLogs();
 
-  const where: string[] = [];
-  const values: unknown[] = [];
+  const histories = await Promise.all(
+    allPages.map(async (wikiPage) => {
+      try {
+        const history = await getWikiPageHistory(wikiPage.id);
 
-  if (filters?.author) {
-    values.push(`%${filters.author}%`);
-    where.push(`m.author_name ILIKE $${values.length}`);
-  }
+        return history.trail.map((item) => {
+          const computedType = getEditLogActionType({
+            versionId: item.versionId,
+            actionType: item.actionType ?? null,
+            valueBefore: item.valueBefore ?? null,
+            valueAfter: item.valueAfter ?? null,
+            editMessage: item.editMessage ?? null,
+          });
 
-  if (filters?.target) {
-    values.push(`%${filters.target}%`);
-    where.push(
-      `(p.title ILIKE $${values.length} OR p.path ILIKE $${values.length})`
-    );
-  }
+          return {
+            pageId: wikiPage.id,
+            pageTitle: wikiPage.title,
+            pagePath: wikiPage.path,
 
-  if (filters?.type === 'create') {
-    where.push(`m.version_id = 1`);
-  }
+            versionId: item.versionId,
+            authorId: item.authorId,
+            authorName: item.displayAuthorName ?? item.authorName,
+            editMessage: item.editMessage ?? null,
+            isMinor: item.isMinor ?? false,
+            byteSize: item.byteSize ?? null,
+            byteDiff: item.byteDiff ?? null,
+            createdAt: item.displayDate ?? item.versionDate,
 
-  if (filters?.type === 'edit') {
-    where.push(`m.version_id > 1`);
-  }
+            // 프론트가 보는 actionType을 보정된 값으로 반환
+            actionType: computedType,
 
-  if (filters?.from) {
-    values.push(filters.from);
-    where.push(`m.created_at >= $${values.length}::date`);
-  }
+            // 원본 Wiki.js actionType도 필요하면 확인 가능
+            rawActionType: item.actionType ?? null,
 
-  if (filters?.to) {
-    values.push(filters.to);
-    where.push(`m.created_at < ($${values.length}::date + INTERVAL '1 day')`);
-  }
+            valueBefore: item.valueBefore ?? null,
+            valueAfter: item.valueAfter ?? null,
 
-  const whereSql = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
+            computedType,
+          };
+        });
+      } catch (error) {
+        return [];
+      }
+    })
+  );
 
-  const client = await pool.connect();
+  let logs = histories.flat();
 
-  try {
-    const logsResult = await client.query(
-      `
-      SELECT
-        m.page_id,
-        m.version_id,
-        p.title AS page_title,
-        p.path AS page_path,
-        m.author_id,
-        m.author_name,
-        m.edit_message,
-        m.is_minor,
-        m.byte_size,
-        m.byte_diff,
-        m.created_at
-      FROM wiki_revision_meta m
-      LEFT JOIN pages p
-        ON p.id = m.page_id
-      ${whereSql}
-      ORDER BY m.created_at DESC
-      LIMIT $${values.length + 1}
-      OFFSET $${values.length + 2}
-      `,
-      [...values, limit, offset]
-    );
+  logs = logs.filter((log) => {
+    if (filters?.author) {
+      const author = log.authorName ?? '';
 
-    const countResult = await client.query(
-      `
-      SELECT COUNT(*)::int AS total
-      FROM wiki_revision_meta m
-      LEFT JOIN pages p
-        ON p.id = m.page_id
-      ${whereSql}
-      `,
-      values
-    );
+      if (!author.toLowerCase().includes(filters.author.toLowerCase())) {
+        return false;
+      }
+    }
 
-    const total = countResult.rows[0]?.total ?? 0;
+    if (filters?.target) {
+      const title = log.pageTitle ?? '';
+      const path = log.pagePath ?? '';
+      const keyword = filters.target.toLowerCase();
 
-    return {
-      logs: logsResult.rows.map((row) => ({
-        pageId: row.page_id,
-        versionId: row.version_id,
-        pageTitle: row.page_title,
-        pagePath: row.page_path,
-        authorId: row.author_id,
-        authorName: row.author_name,
-        editMessage: row.edit_message,
-        isMinor: row.is_minor,
-        byteSize: row.byte_size,
-        byteDiff: row.byte_diff,
-        createdAt: row.created_at,
-      })),
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
-    };
-  } finally {
-    client.release();
-  }
+      if (
+        !title.toLowerCase().includes(keyword) &&
+        !path.toLowerCase().includes(keyword)
+      ) {
+        return false;
+      }
+    }
+
+    if (filters?.type) {
+      if (log.actionType !== filters.type) {
+        return false;
+      }
+    }
+
+    if (filters?.from) {
+      const fromDate = new Date(filters.from);
+      const createdAt = new Date(log.createdAt);
+
+      if (createdAt < fromDate) {
+        return false;
+      }
+    }
+
+    if (filters?.to) {
+      const toDate = new Date(filters.to);
+      toDate.setDate(toDate.getDate() + 1);
+
+      const createdAt = new Date(log.createdAt);
+
+      if (createdAt >= toDate) {
+        return false;
+      }
+    }
+
+    return true;
+  });
+
+  logs.sort(
+    (a, b) =>
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
+
+  const total = logs.length;
+  const start = (page - 1) * limit;
+  const paginatedLogs = logs.slice(start, start + limit);
+
+  return {
+    logs: paginatedLogs,
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+    },
+  };
 }
+
+function isTrashPath(path: string | null | undefined) {
+  return Boolean(path?.startsWith('__trash__/'));
+}
+
+function getEditLogActionType(log: {
+  versionId: number;
+  actionType: string | null;
+  valueBefore: string | null;
+  valueAfter: string | null;
+  editMessage?: string | null;
+}) {
+  if (log.editMessage === '문서 삭제') {
+    return 'delete';
+  }
+
+  if (log.editMessage === '문서 복구') {
+    return 'restore';
+  }
+
+  if (log.actionType === 'move' || log.actionType === 'moved') {
+    const wasTrash = isTrashPath(log.valueBefore);
+    const isTrash = isTrashPath(log.valueAfter);
+
+    if (!wasTrash && isTrash) {
+      return 'delete';
+    }
+
+    if (wasTrash && !isTrash) {
+      return 'restore';
+    }
+
+    return 'move';
+  }
+
+  if (log.actionType === 'initial' || log.versionId === 1) {
+    return 'create';
+  }
+
+  if (log.actionType === 'deleted') {
+    return 'delete';
+  }
+
+  if (log.actionType === 'restored') {
+    return 'restore';
+  }
+
+  return 'edit';
+}
+
 
 async function getCurrentWikiPageAuthor(pageId: number): Promise<{
   authorId: number | null;
