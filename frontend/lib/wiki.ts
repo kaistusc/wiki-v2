@@ -662,7 +662,7 @@ export type WikiPageHistoryItem = {
   versionId: number;
   versionDate: string;
   authorId: number | null;
-  authorName: string;
+  authorName: string | null;
   actionType: string;
   valueBefore: string | null;
   valueAfter: string | null;
@@ -671,6 +671,7 @@ export type WikiPageHistoryItem = {
   isMinor?: boolean;
 
   displayDate?: string;
+  displayAuthorId?: number | null;
   displayAuthorName?: string | null;
 };
 
@@ -747,6 +748,37 @@ export async function getWikiRevisionMetas(pageId: number): Promise<
   }
 }
 
+async function getCurrentWikiPageAuthor(pageId: number): Promise<{
+  authorId: number | null;
+  authorName: string | null;
+}> {
+  const res = await gql(
+    `
+    query ($id: Int!) {
+      pages {
+        single(id: $id) {
+          id
+          authorId
+          authorName
+        }
+      }
+    }
+    `,
+    { id: pageId }
+  );
+
+  if (res?.errors?.length) {
+    console.error('[getCurrentWikiPageAuthor] GraphQL errors:', res.errors);
+  }
+
+  const page = res?.data?.pages?.single;
+
+  return {
+    authorId: page?.authorId ?? null,
+    authorName: page?.authorName ?? null,
+  };
+}
+
 async function getRawWikiPageHistory(
   pageId: number,
   offsetPage = 0,
@@ -798,20 +830,52 @@ export async function getWikiPageHistory(
   const rawHistory = await getRawWikiPageHistory(pageId, offsetPage, offsetSize);
 
   const metas = await getWikiRevisionMetas(pageId);
+  const currentAuthor = await getCurrentWikiPageAuthor(pageId);
 
   const metaByVersionId = new Map(metas.map((meta) => [meta.versionId, meta]));
 
-  const mergedTrail = rawHistory.trail.map((item) => {
+  const rawTrail = rawHistory.trail;
+
+  /**
+   * Wiki.js history의 author가 한 칸씩 밀려서 내려오는 문제 보정.
+   *
+   * 기존 Wiki.js author 목록:
+   * [row0.author, row1.author, row2.author, ...]
+   *
+   * 실제 표시해야 하는 author 목록:
+   * [currentPage.author, row0.author, row1.author, ...]
+   *
+   * 즉 마지막 author는 버리고, current page의 최신 author를 앞에 붙인다.
+   */
+  const shiftedAuthors = [
+    {
+      authorId: currentAuthor.authorId,
+      authorName: currentAuthor.authorName,
+    },
+    ...rawTrail.slice(0, -1).map((item) => ({
+      authorId: item.authorId ?? null,
+      authorName: item.authorName ?? null,
+    })),
+  ];
+
+  const mergedTrail = rawTrail.map((item, index) => {
     const meta = metaByVersionId.get(item.versionId);
+    const displayAuthor = shiftedAuthors[index];
 
     return {
       ...item,
+
       editMessage: meta?.editMessage ?? null,
       isMinor: meta?.isMinor ?? false,
 
-      // 목록 표시용 값
+      // 날짜도 meta 저장 시각을 우선 사용하고 싶으면 유지.
+      // Wiki.js 날짜를 그대로 쓰고 싶으면 item.versionDate로 바꿔도 됨.
       displayDate: meta?.createdAt ?? item.versionDate,
-      displayAuthorName: meta?.authorName ?? item.authorName,
+
+      // authorName은 Wiki.js row를 한 칸 보정한 값 사용.
+      displayAuthorId: displayAuthor?.authorId ?? item.authorId ?? null,
+
+      displayAuthorName: displayAuthor?.authorName ?? item.authorName ?? 'Unknown',
     };
   });
 

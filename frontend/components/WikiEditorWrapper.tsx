@@ -4,11 +4,7 @@ import { useState } from 'react';
 
 import MarkdownEditor from '@/components/WikiEditor';
 import { storageToEditor, editorToStorage } from '@/lib/wikiLinkTransform';
-
-type WikiRevisionMetaInput = {
-  editMessage?: string | null;
-  isMinor?: boolean;
-};
+import { WikiRevisionMetaInput } from '@/lib/wiki';
 
 type Props = {
   storedContent: string;
