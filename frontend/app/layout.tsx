@@ -9,6 +9,7 @@ import { buildTree, NavNode } from '@/lib/buildTree';
 import { fetchAllPages } from '@/lib/wiki';
 import WikiTabs from '@/components/WikiTabs';
 import SearchBar from '@/components/SearchBar';
+import WikiLoginButton from '@/components/WikiLoginButton';
 
 const inter = Inter({
   weight: ['400', '500', '700'],
@@ -129,9 +130,7 @@ export default async function RootLayout({
           <div className="flex-1 min-w-0 pt-4 pr-4 pb-10">
             {/* 로그인 */}
             <div className="flex justify-end gap-3 text-xs text-[#0745AD] mb-2 px-2 ">
-              <Link href="#" className="hover:underline">
-                로그인
-              </Link>
+              <WikiLoginButton allPages={pages} />
             </div>
 
             {/* 탭(Tab) & 검색창 영역 */}

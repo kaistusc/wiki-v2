@@ -1,16 +1,46 @@
 'use client';
 
-import { useParams, useRouter, useSearchParams, usePathname } from 'next/navigation';
+import { useParams, usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
+import HistoryView from '@/components/HistoryView';
+import MarkdownViewer from '@/components/MarkdownViewer';
+import PermissionCheckingView from '@/components/PermissionCheckingView';
+import PermissionDeniedView from '@/components/PermissionDeniedView';
+import TableOfContents from '@/components/TableOfContents';
 import WikiEditorWrapper from '@/components/WikiEditorWrapper';
 import { softDeleteWikiPage, updatePageAndChildren, WikiPageHistory } from '@/lib/wiki';
 import { decodeSlug, parseMarkdown, slugify } from '@/lib/parseMarkdown';
 import { renderWikiLinks } from '@/lib/wikiLinks';
-import MarkdownViewer from '@/components/MarkdownViewer';
-import MarkdownEditor from '@/components/WikiEditor';
-import TableOfContents from '@/components/TableOfContents';
-import HistoryView from '@/components/HistoryView';
+
+type PermissionState = 'idle' | 'checking' | 'ready' | 'denied' | 'error';
+
+type PagePermissions = {
+  loggedIn: boolean;
+  canEdit: boolean;
+  canCreate: boolean;
+  canDelete: boolean;
+  message?: string;
+};
+
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return '알 수 없는 오류가 발생했습니다.';
+}
+
+function isUnauthorizedWikiError(error: unknown) {
+  const message = getErrorMessage(error).toLowerCase();
+
+  return (
+    message.includes('not authorized') ||
+    message.includes('unauthorized') ||
+    message.includes('권한') ||
+    message.includes('로그인이 필요')
+  );
+}
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export function ClientEditor({
@@ -34,12 +64,84 @@ export function ClientEditor({
   const slug = (params.slug ?? []) as string[];
   const decodedSlug = decodeSlug(slug);
   const oldPath = decodedSlug.join('/');
+
   const pageById = new Map(allPages.map((p) => [p.id, { title: p.title, path: p.path }]));
   const pageByTitle = new Map(allPages.map((p) => [p.title, { title: p.title, path: p.path }]));
   const html = renderWikiLinks(page.render, pageById, pageByTitle);
 
+  const [history, setHistory] = useState<WikiPageHistory | null>(null);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+
+  const [permissionState, setPermissionState] = useState<PermissionState>('idle');
+
+  const [permissions, setPermissions] = useState<PagePermissions>({
+    loggedIn: false,
+    canEdit: false,
+    canCreate: false,
+    canDelete: false,
+  });
+
+  const [permissionMessage, setPermissionMessage] = useState('이 문서에 대한 권한이 없습니다.');
+
+  function goBackToDocument() {
+    router.push(pathname);
+  }
+
+  async function fetchPagePermissions() {
+    try {
+      setPermissionState('checking');
+
+      const query = new URLSearchParams({
+        pageId: String(page.id),
+        path: oldPath,
+      });
+
+      const res = await fetch(`/api/wiki/auth/page-permissions?${query.toString()}`, {
+        method: 'GET',
+        cache: 'no-store',
+      });
+
+      const data = (await res.json().catch(() => null)) as PagePermissions | null;
+
+      if (!res.ok || !data) {
+        setPermissions({
+          loggedIn: false,
+          canEdit: false,
+          canCreate: false,
+          canDelete: false,
+        });
+        setPermissionMessage(data?.message ?? '권한 정보를 불러오지 못했습니다.');
+        setPermissionState('error');
+        return;
+      }
+
+      setPermissions(data);
+      setPermissionMessage(data.message ?? '이 문서에 대한 권한이 없습니다.');
+      setPermissionState('ready');
+    } catch (error) {
+      console.error('[ClientEditor] failed to fetch page permissions:', error);
+
+      setPermissions({
+        loggedIn: false,
+        canEdit: false,
+        canCreate: false,
+        canDelete: false,
+      });
+      setPermissionMessage('권한 정보를 확인하지 못했습니다. 잠시 후 다시 시도해주세요.');
+      setPermissionState('error');
+    }
+  }
+
   const handleDelete = () => {
-    if (!confirm('정말로 이 문서를 휴지통으로 이동하시겠습니까?')) return;
+    if (!permissions.canDelete) {
+      setPermissionMessage('이 문서를 삭제할 권한이 없습니다.');
+      setPermissionState('denied');
+      return;
+    }
+
+    if (!confirm('정말로 이 문서를 휴지통으로 이동하시겠습니까?')) {
+      return;
+    }
 
     const executeDelete = async () => {
       try {
@@ -48,6 +150,13 @@ export function ClientEditor({
         window.location.href = '/';
       } catch (error) {
         console.error('문서 삭제 중 오류가 발생했습니다:', error);
+
+        if (isUnauthorizedWikiError(error)) {
+          setPermissionMessage('이 문서를 삭제할 권한이 없습니다.');
+          setPermissionState('denied');
+          return;
+        }
+
         alert('문서를 삭제하는 데 실패했습니다. 다시 시도해 주세요.');
       }
     };
@@ -55,8 +164,20 @@ export function ClientEditor({
     void executeDelete();
   };
 
-  const [history, setHistory] = useState<WikiPageHistory | null>(null);
-  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  function handleCreateChildPage() {
+    if (!permissions.canCreate) {
+      setPermissionMessage('이 문서 아래에 하위 페이지를 만들 권한이 없습니다.');
+      setPermissionState('denied');
+      return;
+    }
+
+    router.push(`/docs/${oldPath}/_new`);
+  }
+
+  useEffect(() => {
+    void fetchPagePermissions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page.id, oldPath]);
 
   useEffect(() => {
     if (!isHistory) return;
@@ -101,7 +222,32 @@ export function ClientEditor({
     );
   }
 
+  if (permissionState === 'denied') {
+    return <PermissionDeniedView message={permissionMessage} onBack={goBackToDocument} />;
+  }
+
   if (isEditing) {
+    if (permissionState === 'idle' || permissionState === 'checking') {
+      return <PermissionCheckingView message="편집 권한을 확인하는 중..." />;
+    }
+
+    if (permissionState === 'error') {
+      return <PermissionDeniedView message={permissionMessage} onBack={goBackToDocument} />;
+    }
+
+    if (!permissions.canEdit) {
+      return (
+        <PermissionDeniedView
+          message={
+            permissions.loggedIn
+              ? '이 문서를 편집할 권한이 없습니다.'
+              : '문서를 편집하려면 로그인이 필요합니다.'
+          }
+          onBack={goBackToDocument}
+        />
+      );
+    }
+
     return (
       <div className="max-w-5xl mx-auto p-6">
         <WikiEditorWrapper
@@ -109,20 +255,34 @@ export function ClientEditor({
           allPages={allPages}
           isNewPage={false}
           onSave={async (markdownForStorage, revisionMeta) => {
-            const { title: newTitle, body } = parseMarkdown(markdownForStorage);
-            const decodedSlug = decodeSlug(slug);
+            try {
+              const { title: newTitle, body } = parseMarkdown(markdownForStorage);
+              const decodedSlug = decodeSlug(slug);
 
-            const parentPath = decodedSlug.length > 1 ? decodedSlug.slice(0, -1).join('/') : '';
-            const newSlug = slugify(newTitle);
-            const newPath = parentPath ? `${parentPath}/${newSlug}` : newSlug;
+              const parentPath = decodedSlug.length > 1 ? decodedSlug.slice(0, -1).join('/') : '';
+              const newSlug = slugify(newTitle);
+              const newPath = parentPath ? `${parentPath}/${newSlug}` : newSlug;
 
-            await updatePageAndChildren(page.id, oldPath, newPath, newTitle, body, revisionMeta);
+              await updatePageAndChildren(page.id, oldPath, newPath, newTitle, body, revisionMeta);
 
-            window.location.href = `/docs/${newPath}`;
+              window.location.href = `/docs/${newPath}`;
+            } catch (error) {
+              console.error('[ClientEditor] failed to save page:', error);
+
+              if (isUnauthorizedWikiError(error)) {
+                setPermissionMessage('이 문서를 저장할 권한이 없습니다.');
+                setPermissionState('denied');
+                return;
+              }
+
+              alert('문서를 저장하는 데 실패했습니다. 다시 시도해 주세요.');
+            }
           }}
         />
+
         <div className="mt-4 text-center">
           <button
+            type="button"
             onClick={() => router.push(pathname)}
             className="text-gray-500 hover:text-gray-700 underline text-sm"
           >
@@ -135,7 +295,6 @@ export function ClientEditor({
 
   return (
     <main className="max-w-none p-0">
-      {/* 문서 제목 (공통 최상단) */}
       <header className="mb-0 pb-2 border-b border-gray-200 flex justify-between items-end">
         <h1 className="text-3xl font-sans font-bold text-gray-900 mb-1 tracking-tight">{title}</h1>
       </header>
@@ -152,22 +311,29 @@ export function ClientEditor({
         </article>
       </div>
 
-      {/* 디자인 위치 수정 필요 */}
-      <div className="flex flex-wrap items-center gap-2 py-3 border-t border-gray-200 mt-6">
-        <button
-          onClick={() => router.push(`/docs/${oldPath}/_new`)}
-          className="px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-200 transition-colors flex items-center gap-1"
-        >
-          하위 페이지
-        </button>
+      {(permissions.canCreate || permissions.canDelete) && (
+        <div className="flex flex-wrap items-center gap-2 py-3 border-t border-gray-200 mt-6">
+          {permissions.canCreate && (
+            <button
+              type="button"
+              onClick={handleCreateChildPage}
+              className="px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-200 transition-colors flex items-center gap-1"
+            >
+              하위 페이지
+            </button>
+          )}
 
-        <button
-          onClick={handleDelete}
-          className="px-3 py-1.5 text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 transition-colors flex items-center gap-1"
-        >
-          삭제
-        </button>
-      </div>
+          {permissions.canDelete && (
+            <button
+              type="button"
+              onClick={handleDelete}
+              className="px-3 py-1.5 text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 transition-colors flex items-center gap-1"
+            >
+              삭제
+            </button>
+          )}
+        </div>
+      )}
     </main>
   );
 }
