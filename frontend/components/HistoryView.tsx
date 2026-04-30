@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 
 import type { WikiPageHistory } from '@/lib/wiki';
 import { renderWikiLinks } from '@/lib/wikiLinks';
@@ -48,6 +48,13 @@ type HistoryItemWithDisplay = WikiPageHistory['trail'][number] & {
   displayDate?: string;
   displayAuthorId?: number | null;
   displayAuthorName?: string | null;
+  byteSize?: number | null;
+  byteDiff?: number | null;
+};
+
+type FilteredHistoryEntry = {
+  item: HistoryItemWithDisplay;
+  originalIndex: number;
 };
 
 type DiffNavigationTarget = {
@@ -164,14 +171,6 @@ function getDisplayAuthorName(item: HistoryItemWithDisplay) {
   return item.displayAuthorName ?? item.authorName ?? 'Unknown';
 }
 
-/**
- * history.trail은 최신순이라고 가정.
- *
- * index가 커질수록 더 오래된 편집.
- * 따라서:
- * - previousVersion: 더 오래된 편집 = index + 1
- * - nextVersion: 더 최신 편집 = index - 1
- */
 function getPreviousVersionTarget(
   history: WikiPageHistory,
   index: number
@@ -202,6 +201,41 @@ function getNextVersionTarget(
     versionId: nextItem.versionId,
     index: index - 1,
   };
+}
+
+function isSameOrBeforeEndDate(itemDate: string, endDate: string) {
+  if (!endDate) {
+    return true;
+  }
+
+  const itemTime = new Date(itemDate).getTime();
+  const endTime = new Date(`${endDate}T23:59:59.999`).getTime();
+
+  return itemTime <= endTime;
+}
+
+function normalizeSearchText(value: string) {
+  return value.toLowerCase().replace(/[\s\-_.,()[\]{}"'`~!@#$%^&*+=:;?/\\|<>]+/g, '');
+}
+
+function matchesCommitMessage(item: HistoryItemWithDisplay, keyword: string) {
+  const normalizedKeyword = normalizeSearchText(keyword);
+
+  if (!normalizedKeyword) {
+    return true;
+  }
+
+  const normalizedMessage = normalizeSearchText(item.editMessage ?? '');
+
+  return normalizedMessage.includes(normalizedKeyword);
+}
+
+function matchesMinorFilter(item: HistoryItemWithDisplay, hideMinor: boolean) {
+  if (!hideMinor) {
+    return true;
+  }
+
+  return !item.isMinor;
 }
 
 function VersionPreview({
@@ -371,6 +405,53 @@ export default function HistoryView({
 
   const [isLoadingDiff, setIsLoadingDiff] = useState(false);
 
+  const [isFilterOpen, setIsFilterOpen] = useState(true);
+
+  const [draftEndDate, setDraftEndDate] = useState('');
+  const [draftCommitMessage, setDraftCommitMessage] = useState('');
+  const [draftHideMinor, setDraftHideMinor] = useState(false);
+
+  const [appliedEndDate, setAppliedEndDate] = useState('');
+  const [appliedCommitMessage, setAppliedCommitMessage] = useState('');
+  const [appliedHideMinor, setAppliedHideMinor] = useState(false);
+
+  const filteredEntries = useMemo<FilteredHistoryEntry[]>(() => {
+    if (!history) {
+      return [];
+    }
+
+    return history.trail
+      .map((rawItem, originalIndex) => ({
+        item: rawItem as HistoryItemWithDisplay,
+        originalIndex,
+      }))
+      .filter(({ item }) => {
+        return (
+          isSameOrBeforeEndDate(getDisplayDate(item), appliedEndDate) &&
+          matchesCommitMessage(item, appliedCommitMessage) &&
+          matchesMinorFilter(item, appliedHideMinor)
+        );
+      });
+  }, [history, appliedEndDate, appliedCommitMessage, appliedHideMinor]);
+
+  const hasActiveFilter =
+    Boolean(appliedEndDate) || Boolean(appliedCommitMessage.trim()) || appliedHideMinor;
+
+  function handleApplyFilter() {
+    setAppliedEndDate(draftEndDate);
+    setAppliedCommitMessage(draftCommitMessage);
+    setAppliedHideMinor(draftHideMinor);
+  }
+
+  function handleResetFilter() {
+    setDraftEndDate('');
+    setDraftCommitMessage('');
+    setDraftHideMinor(false);
+    setAppliedEndDate('');
+    setAppliedCommitMessage('');
+    setAppliedHideMinor(false);
+  }
+
   async function handleOpenHistoryItem(versionId: number, index: number) {
     if (!history) return;
 
@@ -485,10 +566,6 @@ export default function HistoryView({
       };
     }
 
-    /**
-     * Wiki.js pages.version은 선택한 row 자체가 아니라
-     * 바로 위 row의 versionId로 조회해야 해당 row 시점의 content가 나옴.
-     */
     const versionProvider = history.trail[index - 1];
 
     if (!versionProvider?.versionId || versionProvider.versionId <= 0) {
@@ -668,22 +745,93 @@ export default function HistoryView({
       <div className="border-b border-gray-300 pb-3 mb-4">
         <h1 className="text-2xl font-semibold">&quot;{pageTitle}&quot;의 편집 역사</h1>
 
-        <p className="mt-2 text-sm text-blue-600 cursor-pointer hover:underline">
-          이 문서의 기록 보기
-        </p>
-      </div>
-
-      <div className="border border-gray-300 bg-gray-50 mb-4">
         <button
           type="button"
-          className="w-full flex items-center gap-2 px-4 py-3 text-left text-sm font-semibold"
+          onClick={() => {
+            handleResetFilter();
+            setIsFilterOpen(false);
+          }}
+          className="mt-2 text-sm text-blue-600 hover:underline"
         >
-          <span>⌄</span>
-          특정판 필터링
+          이 문서의 기록 보기
         </button>
       </div>
 
-      <div className="text-sm text-gray-800 mb-3 leading-6">
+      <div className="mb-4 border border-gray-300 bg-gray-50">
+        <button
+          type="button"
+          onClick={() => setIsFilterOpen((prev) => !prev)}
+          className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm font-semibold"
+        >
+          <span>{isFilterOpen ? '⌃' : '⌄'}</span>
+          특정판 필터링
+        </button>
+
+        {isFilterOpen && (
+          <div className="border-t border-gray-200 px-4 pb-4 pt-2 text-sm">
+            <div className="mb-3">
+              <label className="mb-1 block font-semibold text-gray-800">끝 날짜:</label>
+              <input
+                type="date"
+                value={draftEndDate}
+                onChange={(event) => setDraftEndDate(event.target.value)}
+                className="w-full max-w-xs rounded border border-gray-300 bg-white px-3 py-2 text-sm"
+              />
+            </div>
+
+            <div className="mb-3">
+              <label className="mb-1 block font-semibold text-blue-900">커밋 메시지 필터:</label>
+              <input
+                type="text"
+                value={draftCommitMessage}
+                onChange={(event) => setDraftCommitMessage(event.target.value)}
+                placeholder="띄어쓰기 없이도 검색됩니다"
+                className="w-full max-w-xl rounded border border-gray-300 bg-white px-3 py-2 text-sm"
+              />
+            </div>
+
+            <div className="mb-3">
+              <label className="inline-flex items-center gap-2 font-semibold text-gray-800">
+                <input
+                  type="checkbox"
+                  checked={draftHideMinor}
+                  onChange={(event) => setDraftHideMinor(event.target.checked)}
+                  className="h-4 w-4"
+                />
+                잔글 제외
+              </label>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={handleApplyFilter}
+                className="rounded bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800"
+              >
+                판 보이기
+              </button>
+
+              {hasActiveFilter && (
+                <button
+                  type="button"
+                  onClick={handleResetFilter}
+                  className="rounded border border-gray-400 bg-white px-4 py-2 text-sm hover:bg-gray-100"
+                >
+                  필터 초기화
+                </button>
+              )}
+            </div>
+
+            {hasActiveFilter && (
+              <p className="mt-2 text-xs text-gray-500">
+                현재 {filteredEntries.length}개의 편집 기록이 표시됩니다.
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="mb-3 text-sm leading-6 text-gray-800">
         <p>차이 선택: 비교하려는 판의 라디오 상자를 선택한 다음 아래의 버튼을 누르세요.</p>
         <p>
           설명: <strong>(최신)</strong> = 최신 판과 비교, <strong>(이전)</strong> = 이전 판과 비교,{' '}
@@ -713,158 +861,163 @@ export default function HistoryView({
 
       {!isLoading && history && history.trail.length > 0 && (
         <div>
-          <p className="mb-2 text-sm text-gray-600">총 {history.total}개의 편집 기록</p>
+          <p className="mb-2 text-sm text-gray-600">
+            총 {history.total}개의 편집 기록
+            {hasActiveFilter ? ` 중 ${filteredEntries.length}개 표시` : ''}
+          </p>
 
-          <ul className="space-y-1 text-sm">
-            {history.trail.map((rawItem, index) => {
-              const item = rawItem as HistoryItemWithDisplay;
+          {filteredEntries.length === 0 ? (
+            <div className="py-8 text-sm text-gray-500">조건에 맞는 편집 기록이 없습니다.</div>
+          ) : (
+            <ul className="space-y-1 text-sm">
+              {filteredEntries.map(({ item, originalIndex }) => {
+                const isLatest = originalIndex === 0;
+                const formattedDate = formatHistoryDate(getDisplayDate(item));
+                const displayAuthorName = getDisplayAuthorName(item);
 
-              const isLatest = index === 0;
-              const formattedDate = formatHistoryDate(getDisplayDate(item));
-              const displayAuthorName = getDisplayAuthorName(item);
+                const actionLabel = getActionLabel(
+                  item.actionType,
+                  item.valueBefore ?? null,
+                  item.valueAfter ?? null
+                );
 
-              const actionLabel = getActionLabel(
-                item.actionType,
-                item.valueBefore ?? null,
-                item.valueAfter ?? null
-              );
+                return (
+                  <li
+                    key={`${item.versionId}-${getDisplayDate(item)}`}
+                    className={[
+                      'flex items-start gap-2 border border-dashed border-gray-300 px-2 py-1',
+                      isLatest ? 'bg-blue-50' : 'bg-white',
+                    ].join(' ')}
+                  >
+                    <span className="mt-[2px] text-gray-700">•</span>
 
-              return (
-                <li
-                  key={`${item.versionId}-${getDisplayDate(item)}`}
-                  className={[
-                    'flex items-start gap-2 border border-dashed border-gray-300 px-2 py-1',
-                    isLatest ? 'bg-blue-50' : 'bg-white',
-                  ].join(' ')}
-                >
-                  <span className="mt-[2px] text-gray-700">•</span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-x-1 gap-y-1">
+                        <span className="text-gray-700">(</span>
 
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-x-1 gap-y-1">
-                      <span className="text-gray-700">(</span>
+                        {isLatest ? (
+                          <span className="font-semibold text-gray-700">최신</span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              void compareHistoryIndexes(originalIndex, 0);
+                            }}
+                            className="text-blue-600 hover:underline"
+                          >
+                            최신
+                          </button>
+                        )}
 
-                      {isLatest ? (
-                        <span className="font-semibold text-gray-700">최신</span>
-                      ) : (
+                        <span className="text-gray-700">|</span>
+
+                        {history.trail[originalIndex + 1] ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              void compareHistoryIndexes(originalIndex, originalIndex + 1);
+                            }}
+                            className="text-blue-600 hover:underline"
+                          >
+                            이전
+                          </button>
+                        ) : (
+                          <span className="text-gray-400">이전</span>
+                        )}
+
+                        <span className="text-gray-700">)</span>
+
+                        <input
+                          type="radio"
+                          name="history-newer"
+                          className="mx-1 h-3 w-3"
+                          checked={selectedNewerIndex === originalIndex}
+                          onChange={() => setSelectedNewerIndex(originalIndex)}
+                        />
+
+                        <input
+                          type="radio"
+                          name="history-older"
+                          className="mx-1 h-3 w-3"
+                          checked={selectedOlderIndex === originalIndex}
+                          onChange={() => setSelectedOlderIndex(originalIndex)}
+                        />
+
                         <button
                           type="button"
                           onClick={() => {
-                            void compareHistoryIndexes(index, 0);
+                            void handleOpenHistoryItem(item.versionId, originalIndex);
                           }}
-                          className="text-blue-600 hover:underline"
+                          className="font-medium text-blue-700 hover:underline"
                         >
-                          최신
+                          {formattedDate}
                         </button>
-                      )}
 
-                      <span className="text-gray-700">|</span>
+                        <span className="font-semibold text-red-600">{displayAuthorName}</span>
 
-                      {history.trail[index + 1] ? (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            void compareHistoryIndexes(index, index + 1);
-                          }}
-                          className="text-blue-600 hover:underline"
-                        >
-                          이전
+                        <span className="text-gray-700">(</span>
+
+                        <button type="button" className="text-red-600 hover:underline">
+                          토론
                         </button>
-                      ) : (
-                        <span className="text-gray-400">이전</span>
-                      )}
 
-                      <span className="text-gray-700">)</span>
+                        <span className="text-gray-700">|</span>
 
-                      <input
-                        type="radio"
-                        name="history-newer"
-                        className="mx-1 h-3 w-3"
-                        checked={selectedNewerIndex === index}
-                        onChange={() => setSelectedNewerIndex(index)}
-                      />
+                        <button type="button" className="text-blue-600 hover:underline">
+                          기여
+                        </button>
 
-                      <input
-                        type="radio"
-                        name="history-older"
-                        className="mx-1 h-3 w-3"
-                        checked={selectedOlderIndex === index}
-                        onChange={() => setSelectedOlderIndex(index)}
-                      />
+                        <span className="text-gray-700">)</span>
 
-                      <button
-                        type="button"
-                        onClick={() => {
-                          void handleOpenHistoryItem(item.versionId, index);
-                        }}
-                        className="font-medium text-blue-700 hover:underline"
-                      >
-                        {formattedDate}
-                      </button>
+                        {item.isMinor && (
+                          <span className="font-semibold text-gray-500">. . 잔글</span>
+                        )}
 
-                      <span className="font-semibold text-red-600">{displayAuthorName}</span>
+                        {item.byteSize !== null && item.byteSize !== undefined && (
+                          <span className="text-gray-700">. . ({item.byteSize} 바이트)</span>
+                        )}
 
-                      <span className="text-gray-700">(</span>
-
-                      <button type="button" className="text-red-600 hover:underline">
-                        토론
-                      </button>
-
-                      <span className="text-gray-700">|</span>
-
-                      <button type="button" className="text-blue-600 hover:underline">
-                        기여
-                      </button>
-
-                      <span className="text-gray-700">)</span>
-
-                      {item.isMinor && (
-                        <span className="font-semibold text-gray-500">. . 잔글</span>
-                      )}
-
-                      {item.byteSize !== null && item.byteSize !== undefined && (
-                        <span className="text-gray-700">. . ({item.byteSize} 바이트)</span>
-                      )}
-
-                      {item.byteDiff !== null && item.byteDiff !== undefined && (
-                        <span
-                          className={['font-semibold', getByteDiffColorClass(item.byteDiff)].join(
-                            ' '
-                          )}
-                        >
-                          ({formatByteDiff(item.byteDiff)})
-                        </span>
-                      )}
-
-                      <span
-                        className={['font-semibold', getActionColorClass(actionLabel)].join(' ')}
-                      >
-                        ({actionLabel})
-                      </span>
-
-                      {item.editMessage ? (
-                        <span className="text-gray-600">. . ({item.editMessage})</span>
-                      ) : item.valueBefore || item.valueAfter ? (
-                        <>
-                          <span className="text-gray-700">. . </span>
-                          <span className="text-gray-600">
-                            {actionLabel === '삭제'
-                              ? '(문서 삭제)'
-                              : actionLabel === '복원'
-                                ? '(문서 복원)'
-                                : item.valueBefore && item.valueAfter
-                                  ? `${item.valueBefore} → ${item.valueAfter}`
-                                  : (item.valueAfter ?? item.valueBefore)}
+                        {item.byteDiff !== null && item.byteDiff !== undefined && (
+                          <span
+                            className={['font-semibold', getByteDiffColorClass(item.byteDiff)].join(
+                              ' '
+                            )}
+                          >
+                            ({formatByteDiff(item.byteDiff)})
                           </span>
-                        </>
-                      ) : (
-                        <span className="text-gray-500">. . (변경 요약 없음)</span>
-                      )}
+                        )}
+
+                        <span
+                          className={['font-semibold', getActionColorClass(actionLabel)].join(' ')}
+                        >
+                          ({actionLabel})
+                        </span>
+
+                        {item.editMessage ? (
+                          <span className="text-gray-600">. . ({item.editMessage})</span>
+                        ) : item.valueBefore || item.valueAfter ? (
+                          <>
+                            <span className="text-gray-700">. . </span>
+                            <span className="text-gray-600">
+                              {actionLabel === '삭제'
+                                ? '(문서 삭제)'
+                                : actionLabel === '복원'
+                                  ? '(문서 복원)'
+                                  : item.valueBefore && item.valueAfter
+                                    ? `${item.valueBefore} → ${item.valueAfter}`
+                                    : (item.valueAfter ?? item.valueBefore)}
+                            </span>
+                          </>
+                        ) : (
+                          <span className="text-gray-500">. . (변경 요약 없음)</span>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </div>
       )}
     </div>
