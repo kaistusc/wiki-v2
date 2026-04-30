@@ -42,5 +42,5 @@ export default function NewPageEditorClient({
     }
   };
 
-  return <WikiEditorWrapper storedContent={markdown} allPages={allPages} onSave={handleSave} />;
+  return <WikiEditorWrapper storedContent={markdown} allPages={allPages} onSave={handleSave} isNewPage={true}/>;
 }
