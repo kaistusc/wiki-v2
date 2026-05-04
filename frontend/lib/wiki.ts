@@ -134,6 +134,27 @@ export async function fetchAllPages(): Promise<WikiPage[]> {
   return availablePages as WikiPage[];
 }
 
+// 역사 보기
+export type WikiPageHistoryItem = {
+  versionId: number;
+  versionDate: string;
+  authorId: number | null;
+  authorName: string | null;
+  actionType: string;
+  valueBefore: string | null;
+  valueAfter: string | null;
+
+  editMessage?: string | null;
+  isMinor?: boolean;
+
+  byteSize?: number | null;
+  byteDiff?: number | null;
+
+  displayDate?: string;
+  displayAuthorId?: number | null;
+  displayAuthorName?: string | null;
+};
+
 async function getLatestWikiRevisionWithRetry(
   pageId: number,
   maxAttempts = 10,
@@ -294,6 +315,60 @@ async function waitForRevisionAfterUpdate({
   return null;
 }
 
+export async function getWikiRevisionMetas(pageId: number): Promise<
+  {
+    pageId: number;
+    versionId: number;
+    authorId: number | null;
+    authorName: string | null;
+    editMessage: string | null;
+    isMinor: boolean;
+    byteSize: number | null;
+    byteDiff: number | null;
+    createdAt: string;
+    updatedAt: string;
+  }[]
+> {
+  const client = await pool.connect();
+
+  try {
+    const result = await client.query(
+      `
+      SELECT
+        page_id,
+        version_id,
+        author_id,
+        author_name,
+        edit_message,
+        is_minor,
+        byte_size,
+        byte_diff,
+        created_at,
+        updated_at
+      FROM wiki_revision_meta
+      WHERE page_id = $1
+      ORDER BY created_at DESC
+      `,
+      [pageId]
+    );
+
+    return result.rows.map((row) => ({
+      pageId: row.page_id,
+      versionId: row.version_id,
+      authorId: row.author_id,
+      authorName: row.author_name,
+      editMessage: row.edit_message,
+      isMinor: row.is_minor,
+      byteSize: row.byte_size,
+      byteDiff: row.byte_diff,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }));
+  } finally {
+    client.release();
+  }
+}
+
 export async function updateWikiPageWithPath(
   id: number,
   title: string,
@@ -444,6 +519,47 @@ export async function updateWikiPageWithPath(
   }
 
   return updateRes;
+}
+
+async function getRawWikiPageHistory(
+  pageId: number,
+  offsetPage = 0,
+  offsetSize = 50
+): Promise<{
+  total: number;
+  trail: WikiPageHistoryItem[];
+}> {
+  const res = await gql(
+    `
+    query ($id: Int!, $offsetPage: Int, $offsetSize: Int) {
+      pages {
+        history(id: $id, offsetPage: $offsetPage, offsetSize: $offsetSize) {
+          total
+          trail {
+            versionId
+            versionDate
+            authorId
+            authorName
+            actionType
+            valueBefore
+            valueAfter
+          }
+        }
+      }
+    }
+    `,
+    {
+      id: pageId,
+      offsetPage,
+      offsetSize,
+    },
+    { auth: 'public' }
+  );
+
+  return {
+    total: res?.data?.pages?.history?.total ?? 0,
+    trail: res?.data?.pages?.history?.trail ?? [],
+  };
 }
 
 async function waitForNewWikiRevision({
@@ -791,26 +907,7 @@ export async function fetchAllPagesWithContent(): Promise<any[]> {
   );
 
   return pagesWithContent;
-// 역사 보기
-export type WikiPageHistoryItem = {
-  versionId: number;
-  versionDate: string;
-  authorId: number | null;
-  authorName: string | null;
-  actionType: string;
-  valueBefore: string | null;
-  valueAfter: string | null;
-
-  editMessage?: string | null;
-  isMinor?: boolean;
-
-  byteSize?: number | null;
-  byteDiff?: number | null;
-
-  displayDate?: string;
-  displayAuthorId?: number | null;
-  displayAuthorName?: string | null;
-};
+}
 
 export type WikiPageVersion = {
   versionId: number;
@@ -836,60 +933,6 @@ export type WikiPageHistory = {
   total: number;
   trail: WikiPageHistoryItem[];
 };
-
-export async function getWikiRevisionMetas(pageId: number): Promise<
-  {
-    pageId: number;
-    versionId: number;
-    authorId: number | null;
-    authorName: string | null;
-    editMessage: string | null;
-    isMinor: boolean;
-    byteSize: number | null;
-    byteDiff: number | null;
-    createdAt: string;
-    updatedAt: string;
-  }[]
-> {
-  const client = await pool.connect();
-
-  try {
-    const result = await client.query(
-      `
-      SELECT
-        page_id,
-        version_id,
-        author_id,
-        author_name,
-        edit_message,
-        is_minor,
-        byte_size,
-        byte_diff,
-        created_at,
-        updated_at
-      FROM wiki_revision_meta
-      WHERE page_id = $1
-      ORDER BY created_at DESC
-      `,
-      [pageId]
-    );
-
-    return result.rows.map((row) => ({
-      pageId: row.page_id,
-      versionId: row.version_id,
-      authorId: row.author_id,
-      authorName: row.author_name,
-      editMessage: row.edit_message,
-      isMinor: row.is_minor,
-      byteSize: row.byte_size,
-      byteDiff: row.byte_diff,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-    }));
-  } finally {
-    client.release();
-  }
-}
 
 async function getCurrentWikiPageAuthor(pageId: number): Promise<{
   authorId: number | null;
@@ -920,47 +963,6 @@ async function getCurrentWikiPageAuthor(pageId: number): Promise<{
   return {
     authorId: page?.authorId ?? null,
     authorName: page?.authorName ?? null,
-  };
-}
-
-async function getRawWikiPageHistory(
-  pageId: number,
-  offsetPage = 0,
-  offsetSize = 50
-): Promise<{
-  total: number;
-  trail: WikiPageHistoryItem[];
-}> {
-  const res = await gql(
-    `
-    query ($id: Int!, $offsetPage: Int, $offsetSize: Int) {
-      pages {
-        history(id: $id, offsetPage: $offsetPage, offsetSize: $offsetSize) {
-          total
-          trail {
-            versionId
-            versionDate
-            authorId
-            authorName
-            actionType
-            valueBefore
-            valueAfter
-          }
-        }
-      }
-    }
-    `,
-    {
-      id: pageId,
-      offsetPage,
-      offsetSize,
-    },
-    { auth: 'public' }
-  );
-
-  return {
-    total: res?.data?.pages?.history?.total ?? 0,
-    trail: res?.data?.pages?.history?.trail ?? [],
   };
 }
 
@@ -1056,26 +1058,4 @@ export async function getWikiPageVersion(
   );
 
   return res?.data?.pages?.version ?? null;
-}
-
-export async function restoreWikiPageVersion(pageId: number, versionId: number) {
-  return gql(
-    `
-    mutation ($pageId: Int!, $versionId: Int!) {
-      pages {
-        restore(pageId: $pageId, versionId: $versionId) {
-          responseResult {
-            succeeded
-            message
-          }
-        }
-      }
-    }
-    `,
-    {
-      pageId,
-      versionId,
-    },
-    { auth: 'required' }
-  );
 }
