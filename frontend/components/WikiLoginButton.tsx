@@ -179,7 +179,12 @@ export default function WikiLoginButton({
               </p>
             </div>
 
-            <form onSubmit={void handleLogin} className="px-5 py-4">
+            <form
+              onSubmit={(event) => {
+                void handleLogin(event);
+              }}
+              className="px-5 py-4"
+            >
               <div className="mb-4">
                 <label
                   htmlFor="wiki-login-username"
