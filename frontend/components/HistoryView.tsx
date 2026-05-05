@@ -96,18 +96,18 @@ function getActionLabel(
 
 		case 'delete':
 		case 'deleted':
-			return '삭제';
+			return '문서 삭제';
 
 		case 'restore':
 		case 'restored':
-			return '복원';
+			return '문서 복원';
 
 		case 'updated':
 		case 'edit':
-			return '편집';
+			return '문서 편집';
 
 		default:
-			return '편집';
+			return '문서 편집';
 	}
 }
 
