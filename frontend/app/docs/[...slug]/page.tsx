@@ -33,14 +33,14 @@ export default async function DocsPage({
   const page = await getWikiPage(path);
 
   if (!page) {
-    if (mode === 'edit') {
-      return <NewPageEditor initialTitle={title} />;
-    }
-
     // 페이지가 존재하지 않지만 삭제된 페이지인지 확인
     const isDeleted = await checkPageWasDeleted(path);
     if (isDeleted) {
       return <div>해당 문서는 관리자에 의해 삭제되었습니다. 학부 총학생회로 문의해주세요.</div>;
+    }
+
+    if (mode === 'edit') {
+      return <NewPageEditor initialTitle={title} />;
     }
 
     return (
