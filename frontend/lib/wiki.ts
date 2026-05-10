@@ -1059,3 +1059,21 @@ export async function getWikiPageVersion(
 
   return res?.data?.pages?.version ?? null;
 }
+
+export async function checkPageWasDeleted(targetPath: string): Promise<boolean> {
+  const res = await gql(`
+    query {
+      pages {
+        list(limit: 5000) {
+          path
+        }
+      }
+    }
+  `);
+
+  const pages = res?.data?.pages?.list || [];
+
+  const trashPrefix = `__trash__/${targetPath}__deleted__`;
+
+  return pages.some((p: { path: string }) => p.path.startsWith(trashPrefix));
+}

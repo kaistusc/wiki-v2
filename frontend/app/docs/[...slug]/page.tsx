@@ -1,4 +1,4 @@
-import { fetchAllPages, getWikiPage } from '@/lib/wiki';
+import { checkPageWasDeleted, fetchAllPages, getWikiPage } from '@/lib/wiki';
 import { titleFromSlug } from '@/lib/parseMarkdown';
 import { injectTemplates } from '@/lib/templateRenderer';
 
@@ -19,19 +19,28 @@ export default async function DocsPage({
   const title = titleFromSlug(safeSlug[safeSlug.length - 1]);
   const rawPath = safeSlug.join('/');
   const path = decodeURIComponent(rawPath);
-  const page = await getWikiPage(path);
   const temp = safeSlug[safeSlug.length - 1];
 
+  // 사용자가 직접 __trash__ 접근 방지
   if (path.startsWith('__trash__')) {
-    return <div>Not Found</div>;
+    return <div>해당 경로는 접근이 제한됩니다.</div>;
   }
 
   if (temp === '_new') {
     return <NewPageEditor />;
   }
+
+  const page = await getWikiPage(path);
+
   if (!page) {
     if (mode === 'edit') {
       return <NewPageEditor initialTitle={title} />;
+    }
+
+    // 페이지가 존재하지 않지만 삭제된 페이지인지 확인
+    const isDeleted = await checkPageWasDeleted(path);
+    if (isDeleted) {
+      return <div>해당 문서는 관리자에 의해 삭제되었습니다. 학부 총학생회로 문의해주세요.</div>;
     }
 
     return (
