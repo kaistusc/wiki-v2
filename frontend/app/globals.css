@@ -19,6 +19,25 @@ body {
   display: none !important;
 }
 
+.toastui-editor-popup,
+.toastui-editor-popup-color {
+  height: max-content !important;
+  max-height: none !important;
+  padding-bottom: 8px !important; /* 아래쪽 숨통 트여주기 */
+}
+
+.toastui-editor-popup-body {
+  height: max-content !important;
+  overflow: visible !important;
+}
+
+.tui-colorpicker-container canvas,
+.tui-colorpicker-container button,
+.tui-colorpicker-container input {
+  box-sizing: content-box !important;
+  margin: 0 !important;
+}
+
 @layer utilities {
   .toastui-editor-contents,
   .toastui-editor-defaultUI,

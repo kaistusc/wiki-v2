@@ -1,9 +1,18 @@
 'use client';
 
 import { useState } from 'react';
+import dynamic from 'next/dynamic';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 
-import MarkdownEditor from '@/components/WikiEditor';
+// import MarkdownEditor from '@/components/WikiEditor';
+const MarkdownEditor = dynamic(() => import('./WikiEditor'), {
+  ssr: false,
+  loading: () => (
+    <div className="flex justify-center items-center h-[70vh] bg-gray-50 border border-gray-200 rounded-md">
+      <span className="text-gray-500">에디터를 불러오는 중...</span>
+    </div>
+  ),
+});
 import { storageToEditor, editorToStorage } from '@/lib/wikiLinkTransform';
 import { WikiRevisionMetaInput } from '@/lib/wiki';
 
