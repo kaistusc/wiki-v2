@@ -23,7 +23,7 @@ body {
 .toastui-editor-popup-color {
   height: max-content !important;
   max-height: none !important;
-  padding-bottom: 8px !important; /* 아래쪽 숨통 트여주기 */
+  padding-bottom: 8px !important;
 }
 
 .toastui-editor-popup-body {

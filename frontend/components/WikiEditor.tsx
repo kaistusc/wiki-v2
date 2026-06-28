@@ -1,6 +1,5 @@
 'use client';
 
-// 🌟 useEffect 추가
 import { useRef, useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import '@toast-ui/editor/dist/toastui-editor.css';
