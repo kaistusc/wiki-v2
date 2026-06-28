@@ -8,65 +8,89 @@ export const fetchCache = 'force-no-store';
 export default async function AllPagesList() {
   const allPages = await fetchAllPages();
 
-  // 한국어 가나다순, 영어 알파벳순 정렬
   const sortedPages = [...allPages].sort((a, b) =>
-    a.title.localeCompare(b.title, 'ko-KR', { sensitivity: 'base' })
+    a.path.localeCompare(b.path, 'ko-KR', { sensitivity: 'base' })
   );
 
-  // 2. 일반 문서와 Template을 분리하여 배열
   const normalPages = sortedPages.filter((page) => !page.title.startsWith('틀:'));
   const templatePages = sortedPages.filter((page) => page.title.startsWith('틀:'));
 
-  return (
-    <div className="max-w-4xl mx-auto p-8">
-      <h1 className="text-3xl font-bold text-gray-900 mb-2">모든 문서 목록</h1>
-      <p className="text-gray-600 mb-8">현재 위키에 등록된 전체 문서({allPages.length}개)입니다.</p>
+  const groupPagesByRoot = (pages: any[]) => {
+    const groups: Record<string, any[]> = {};
+    pages.forEach((page) => {
+      const rootPath = page.path.split('/')[0];
+      if (!groups[rootPath]) groups[rootPath] = [];
+      groups[rootPath].push(page);
+    });
+    return Object.values(groups);
+  };
 
-      <div className="space-y-12">
-        {/* 일반 문서 */}
+  const normalGroups = groupPagesByRoot(normalPages);
+  const templateGroups = groupPagesByRoot(templatePages);
+
+  const renderPageItem = (page: any) => {
+    const depth = page.path.split('/').length - 1;
+
+    return (
+      <li
+        key={page.id}
+        className="mb-[2px] leading-snug"
+        style={{ paddingLeft: `${depth * 1.2}rem` }}
+      >
+        {depth > 0 && (
+          <span className="text-[#54595d] mr-1 inline-block select-none text-[0.9em]">↳</span>
+        )}
+        <Link
+          href={`/docs/${page.path}`}
+          className="text-[#0645ad] hover:underline visited:text-[#0b0080] text-[15px] break-all"
+          title={page.title}
+        >
+          {page.title}
+        </Link>
+      </li>
+    );
+  };
+
+  return (
+    <div className="max-w-5xl mx-auto p-8 font-sans text-[#202122]">
+      <h1 className="text-[1.8em] font-normal border-b border-[#a2a9b1] pb-1 mb-4">
+        모든 문서 목록
+      </h1>
+      <p className="text-[14px] mb-8">현재 위키에 등록된 전체 문서({allPages.length}개)입니다.</p>
+
+      <div className="space-y-10">
         <section>
-          <h2 className="text-xl font-bold text-gray-800 border-b pb-2 mb-4 flex items-center gap-2">
-            일반 문서{' '}
-            <span className="text-sm font-normal text-gray-500">({normalPages.length})</span>
+          <h2 className="text-[1.5em] font-normal border-b border-[#a2a9b1] pb-1 mb-4 flex items-baseline gap-2">
+            일반 문서
+            <span className="text-[0.6em] text-[#54595d]">({normalPages.length})</span>
           </h2>
           {normalPages.length === 0 ? (
-            <p className="text-gray-500 text-sm">작성된 문서가 없습니다.</p>
+            <p className="text-[14px] text-[#54595d]">작성된 문서가 없습니다.</p>
           ) : (
-            <ul className="flex flex-col space-y-2">
-              {normalPages.map((page) => (
-                <li key={page.id} className="truncate">
-                  <Link
-                    href={`/docs/${page.path}`}
-                    className="text-blue-600 hover:text-blue-800 hover:underline transition-colors"
-                  >
-                    {page.title}
-                  </Link>
-                </li>
+            <div className="columns-1 md:columns-2 lg:columns-3 gap-8">
+              {normalGroups.map((group, idx) => (
+                <ul key={idx} className="break-inside-avoid list-none m-0 p-0 mb-5">
+                  {group.map((page) => renderPageItem(page))}
+                </ul>
               ))}
-            </ul>
+            </div>
           )}
         </section>
 
-        {/* Template */}
         <section>
-          <h2 className="text-xl font-bold text-gray-800 border-b pb-2 mb-4 flex items-center gap-2">
-            틀 <span className="text-sm font-normal text-gray-500">({templatePages.length})</span>
+          <h2 className="text-[1.5em] font-normal border-b border-[#a2a9b1] pb-1 mb-4 flex items-baseline gap-2">
+            틀<span className="text-[0.6em] text-[#54595d]">({templatePages.length})</span>
           </h2>
           {templatePages.length === 0 ? (
-            <p className="text-gray-500 text-sm">생성된 틀이 없습니다.</p>
+            <p className="text-[14px] text-[#54595d]">생성된 틀이 없습니다.</p>
           ) : (
-            <ul className="flex flex-col space-y-2">
-              {templatePages.map((page) => (
-                <li key={page.id} className="truncate">
-                  <Link
-                    href={`/docs/${page.path}`}
-                    className="text-emerald-600 hover:text-emerald-800 hover:underline transition-colors"
-                  >
-                    {page.title}
-                  </Link>
-                </li>
+            <div className="columns-1 md:columns-2 lg:columns-3 gap-8">
+              {templateGroups.map((group, idx) => (
+                <ul key={idx} className="break-inside-avoid list-none m-0 p-0 mb-5">
+                  {group.map((page) => renderPageItem(page))}
+                </ul>
               ))}
-            </ul>
+            </div>
           )}
         </section>
       </div>
