@@ -20,12 +20,14 @@
     "@tiptap/extension-image": "^3.15.3",
     "@tiptap/extension-link": "^3.15.3",
     "@toast-ui/editor": "^3.2.2",
+    "@toast-ui/editor-plugin-color-syntax": "^3.1.0",
     "@toast-ui/react-editor": "^3.2.3",
     "next": "16.1.2",
     "pg": "^8.17.1",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "style.css": "link:@blocknote/react/style.css",
+    "tui-color-picker": "^2.2.8",
     "turndown": "^7.2.2"
   },
   "devDependencies": {
