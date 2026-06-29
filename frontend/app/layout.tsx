@@ -108,8 +108,8 @@ export default async function RootLayout({
                   </Link>
                 </li>
                 <li className="mb-1">
-                  <Link href="#" className="hover:underline">
-                    특수 문서 목록
+                  <Link href="/docs/allpages" className="hover:underline">
+                    전체 문서 목록
                   </Link>
                 </li>
                 <li className="mb-1">
