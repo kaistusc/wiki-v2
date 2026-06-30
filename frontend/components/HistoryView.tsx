@@ -96,19 +96,26 @@ function getActionLabel(
     return '이동';
   }
 
-  switch (actionType) {
-    case 'initial':
-      return '문서 생성';
-    case 'deleted':
-      return '삭제';
-    case 'restored':
-      return '복원';
-    case 'updated':
-    case 'edit':
-      return '편집';
-    default:
-      return '편집';
-  }
+  	switch (actionType) {
+		case 'initial':
+		case 'create':
+			return '문서 생성';
+
+		case 'delete':
+		case 'deleted':
+			return '문서 삭제';
+
+		case 'restore':
+		case 'restored':
+			return '문서 복원';
+
+		case 'updated':
+		case 'edit':
+			return '문서 편집';
+
+		default:
+			return '문서 편집';
+	}
 }
 
 function getActionColorClass(actionLabel: string) {
