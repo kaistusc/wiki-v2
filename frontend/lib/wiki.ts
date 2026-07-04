@@ -174,6 +174,26 @@ async function getLatestWikiRevisionWithRetry(
   return null;
 }
 
+export async function fetchAllPagesForLogs() {
+  const client = await pool.connect();
+
+  try {
+    const result = await client.query(`
+      SELECT id, title, path
+      FROM pages
+      ORDER BY "updatedAt" DESC
+    `);
+
+    return result.rows.map((row) => ({
+      id: row.id,
+      title: row.title,
+      path: row.path,
+    }));
+  } finally {
+    client.release();
+  }
+}
+
 // 메타 정보를 포함하여 변경사항을 저장
 export async function saveWikiRevisionMeta({
   pageId,
@@ -811,12 +831,19 @@ export async function softDeleteWikiPage(pageId: number, currentPath: string) {
   const ts = formatDeleteTimestamp();
   const trashPath = `__trash__/${currentPath}__deleted__${ts}`;
   const pageRes = await getPageContentById(pageId);
+  const page = pageRes.data.pages.single;
 
   return updateWikiPageWithPath(
     pageId,
-    pageRes.data.pages.single.title,
-    pageRes.data.pages.single.content,
-    trashPath
+    page.title,
+    page.content,
+    trashPath,
+    'en',
+    {
+      editMessage: '문서 삭제',
+      isMinor: false,
+      previousContentForByteDiff: page.content,
+    }
   );
 }
 
@@ -933,6 +960,210 @@ export type WikiPageHistory = {
   total: number;
   trail: WikiPageHistoryItem[];
 };
+
+export type WikiEditLogItem = {
+  pageId: number;
+  versionId: number;
+  authorId: number | null;
+  authorName: string | null;
+  editMessage: string | null;
+  isMinor: boolean;
+  byteSize: number | null;
+  byteDiff: number | null;
+  createdAt: string;
+};
+
+export type WikiEditLogsResult = {
+  logs: WikiEditLogItem[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+};
+
+export async function getWikiEditLogs(
+  page: number,
+  limit: number,
+  filters?: {
+    author?: string;
+    target?: string;
+    type?: string;
+    from?: string;
+    to?: string;
+  }
+) {
+  const allPages = await fetchAllPagesForLogs();
+
+  const histories = await Promise.all(
+    allPages.map(async (wikiPage) => {
+      try {
+        const history = await getWikiPageHistory(wikiPage.id);
+
+        return history.trail.map((item) => {
+          const computedType = getEditLogActionType({
+            versionId: item.versionId,
+            actionType: item.actionType ?? null,
+            valueBefore: item.valueBefore ?? null,
+            valueAfter: item.valueAfter ?? null,
+            editMessage: item.editMessage ?? null,
+          });
+
+          return {
+            pageId: wikiPage.id,
+            pageTitle: wikiPage.title,
+            pagePath: wikiPage.path,
+
+            versionId: item.versionId,
+            authorId: item.authorId,
+            authorName: item.displayAuthorName ?? item.authorName,
+            editMessage: item.editMessage ?? null,
+            isMinor: item.isMinor ?? false,
+            byteSize: item.byteSize ?? null,
+            byteDiff: item.byteDiff ?? null,
+            createdAt: item.displayDate ?? item.versionDate,
+
+            // 프론트가 보는 actionType을 보정된 값으로 반환
+            actionType: computedType,
+
+            // 원본 Wiki.js actionType도 필요하면 확인 가능
+            rawActionType: item.actionType ?? null,
+
+            valueBefore: item.valueBefore ?? null,
+            valueAfter: item.valueAfter ?? null,
+
+            computedType,
+          };
+        });
+      } catch (error) {
+        return [];
+      }
+    })
+  );
+
+  let logs = histories.flat();
+
+  logs = logs.filter((log) => {
+    if (filters?.author) {
+      const author = log.authorName ?? '';
+
+      if (!author.toLowerCase().includes(filters.author.toLowerCase())) {
+        return false;
+      }
+    }
+
+    if (filters?.target) {
+      const title = log.pageTitle ?? '';
+      const path = log.pagePath ?? '';
+      const keyword = filters.target.toLowerCase();
+
+      if (
+        !title.toLowerCase().includes(keyword) &&
+        !path.toLowerCase().includes(keyword)
+      ) {
+        return false;
+      }
+    }
+
+    if (filters?.type) {
+      if (log.actionType !== filters.type) {
+        return false;
+      }
+    }
+
+    if (filters?.from) {
+      const fromDate = new Date(filters.from);
+      const createdAt = new Date(log.createdAt);
+
+      if (createdAt < fromDate) {
+        return false;
+      }
+    }
+
+    if (filters?.to) {
+      const toDate = new Date(filters.to);
+      toDate.setDate(toDate.getDate() + 1);
+
+      const createdAt = new Date(log.createdAt);
+
+      if (createdAt >= toDate) {
+        return false;
+      }
+    }
+
+    return true;
+  });
+
+  logs.sort(
+    (a, b) =>
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
+
+  const total = logs.length;
+  const start = (page - 1) * limit;
+  const paginatedLogs = logs.slice(start, start + limit);
+
+  return {
+    logs: paginatedLogs,
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+    },
+  };
+}
+
+function isTrashPath(path: string | null | undefined) {
+  return Boolean(path?.startsWith('__trash__/'));
+}
+
+function getEditLogActionType(log: {
+  versionId: number;
+  actionType: string | null;
+  valueBefore: string | null;
+  valueAfter: string | null;
+  editMessage?: string | null;
+}) {
+  if (log.editMessage === '문서 삭제') {
+    return 'delete';
+  }
+
+  if (log.editMessage === '문서 복구') {
+    return 'restore';
+  }
+
+  if (log.actionType === 'move' || log.actionType === 'moved') {
+    const wasTrash = isTrashPath(log.valueBefore);
+    const isTrash = isTrashPath(log.valueAfter);
+
+    if (!wasTrash && isTrash) {
+      return 'delete';
+    }
+
+    if (wasTrash && !isTrash) {
+      return 'restore';
+    }
+
+    return 'move';
+  }
+
+  if (log.actionType === 'initial' || log.versionId === 1) {
+    return 'create';
+  }
+
+  if (log.actionType === 'deleted') {
+    return 'delete';
+  }
+
+  if (log.actionType === 'restored') {
+    return 'restore';
+  }
+
+  return 'edit';
+}
+
 
 async function getCurrentWikiPageAuthor(pageId: number): Promise<{
   authorId: number | null;
