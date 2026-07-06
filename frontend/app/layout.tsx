@@ -131,6 +131,19 @@ export default async function RootLayout({
                 </li>
               </ul>
             </div>
+
+            <div className="mb-6">
+              <h3 className="text-xs font-bold text-[#54595D] mb-2 pb-1 uppercase tracking-tighter cursor-default ml-1">
+                편집 기록
+              </h3>
+              <ul className="text-[12px] leading-[14px] text-[#0745AD] ml-2">
+                <li className="mb-1">
+                  <Link href="/logs" className="hover:underline">
+                    모든 공개 기록
+                  </Link>
+                </li>
+              </ul>
+            </div>
           </aside>
 
           {}

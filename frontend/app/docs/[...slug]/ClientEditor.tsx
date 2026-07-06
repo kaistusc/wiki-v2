@@ -332,6 +332,14 @@ export function ClientEditor({
               삭제
             </button>
           )}
+
+          <button
+            type="button"
+            onClick={() => window.print()}
+            className="ml-auto px-3 py-1.5 text-sm font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 transition-colors flex items-center gap-1"
+          >
+            인쇄하기
+          </button>
         </div>
       )}
     </main>
