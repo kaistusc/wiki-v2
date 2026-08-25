@@ -4,6 +4,7 @@ import { cookies } from 'next/headers';
 
 import { pool } from './db';
 import { formatDeleteTimestamp } from './time';
+import { extractDescription } from './parseMarkdown';
 
 const API = process.env.WIKI_API!;
 const READ_TOKEN = process.env.WIKI_READ_TOKEN ?? '';
@@ -413,6 +414,8 @@ export async function updateWikiPageWithPath(
     history: beforeHistory ? summarizeHistory(beforeHistory) : null,
   });
 
+  const autoDescription = extractDescription(content, 120);
+
   const updateRes = await gql(
     `
     mutation UpdatePage(
@@ -454,7 +457,7 @@ export async function updateWikiPageWithPath(
       path,
       locale,
       tags: [],
-      description: '',
+      description: autoDescription,
       editor: 'markdown',
       isPrivate: false,
     },
@@ -840,7 +843,21 @@ export async function fetchRecentPages(limit = 5): Promise<any[]> {
   return res?.data?.pages?.list ?? [];
 }
 
-export async function searchWikiPages(query: string): Promise<any[]> {
+export interface SearchResultItem {
+  id: number;
+  title: string;
+  description: string;
+  path: string;
+  locale: string;
+}
+
+export async function searchWikiPages(query: string): Promise<SearchResultItem[]> {
+  const trimmed = query.trim();
+
+  if (!trimmed) {
+    return [];
+  }
+
   const res = await gql(
     `
     query ($query: String!) {
@@ -849,7 +866,9 @@ export async function searchWikiPages(query: string): Promise<any[]> {
           results {
             id
             title
+            description
             path
+            locale
           }
         }
       }
@@ -859,10 +878,10 @@ export async function searchWikiPages(query: string): Promise<any[]> {
     { auth: 'public' }
   );
 
-  const allResults = res?.data?.pages?.search.results ?? [];
+  const allResults = res?.data?.pages?.search.results ?? res?.pages?.search?.results ?? [];
 
   const withoutDeletedResults = allResults.filter(
-    (page: any) => !page.path.startsWith('__trash__/')
+    (page: SearchResultItem) => !page.path.startsWith('__trash__/')
   );
 
   return withoutDeletedResults;
