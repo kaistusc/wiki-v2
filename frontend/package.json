@@ -26,6 +26,9 @@
     "pg": "^8.17.1",
     "react": "19.2.3",
     "react-dom": "19.2.3",
+    "remark": "^15.0.1",
+    "remark-gfm": "^4.0.1",
+    "remark-html": "^16.0.1",
     "style.css": "link:@blocknote/react/style.css",
     "tui-color-picker": "^2.2.8",
     "turndown": "^7.2.2"

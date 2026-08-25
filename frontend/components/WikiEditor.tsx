@@ -1,10 +1,10 @@
 'use client';
 
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useState, useEffect, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import '@toast-ui/editor/dist/toastui-editor.css';
-import '../app/styles/tui-color-picker-fixed.css';
 import '@toast-ui/editor-plugin-color-syntax/dist/toastui-editor-plugin-color-syntax.css';
+import '../app/styles/tui-color-picker-fixed.css';
 import colorSyntax from '@toast-ui/editor-plugin-color-syntax';
 
 const ToastEditor = dynamic(() => import('@toast-ui/react-editor').then((m) => m.Editor), {
@@ -15,6 +15,10 @@ type Props = {
   initialMarkdown: string;
   onChange: (markdown: string) => void;
 };
+
+const PRIMARY_COLOR = '#0745AD';
+const PRIMARY_DARK_COLOR = '#063A8F';
+const DANGER_COLOR = '#BB0001';
 
 const createToolbarButton = (text: string, onClick: () => void) => {
   const button = document.createElement('button');
@@ -39,6 +43,11 @@ export default function MarkdownEditor({ initialMarkdown, onChange }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [toolbarItems, setToolbarItems] = useState<any[] | null>(null);
+
+  const colorSyntaxPlugin = useMemo(() => {
+    const pluginFn = (colorSyntax as any).default || colorSyntax;
+    return [pluginFn, { preset: [PRIMARY_COLOR, PRIMARY_DARK_COLOR, DANGER_COLOR] }];
+  }, []);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -124,6 +133,9 @@ export default function MarkdownEditor({ initialMarkdown, onChange }: Props) {
       }
 
       editorInstance.insertText(`[^${nextId}]`);
+
+      const currentMD = editorInstance.getMarkdown();
+      editorInstance.setMarkdown(`${currentMD}\n\n[^${nextId}]: 각주 내용을 입력하세요.`);
     });
 
     setToolbarItems([
@@ -165,7 +177,7 @@ export default function MarkdownEditor({ initialMarkdown, onChange }: Props) {
         height="70vh"
         initialEditType="markdown"
         hideModeSwitch
-        plugins={[colorSyntax]}
+        plugins={[colorSyntaxPlugin]}
         hooks={{
           addImageBlobHook: (
             blob: Blob | File,
