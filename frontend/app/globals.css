@@ -19,10 +19,97 @@ body {
   display: none !important;
 }
 
+.toastui-editor-popup,
+.toastui-editor-popup-color {
+  height: max-content !important;
+  max-height: none;
+  padding-bottom: 8px;
+}
+
+.toastui-editor-popup-body {
+  height: max-content;
+  overflow: visible;
+}
+
+.tui-colorpicker-container canvas,
+.tui-colorpicker-container button,
+.tui-colorpicker-container input {
+  box-sizing: content-box !important;
+  margin: 0 !important;
+}
+
 @layer utilities {
   .toastui-editor-contents,
   .toastui-editor-defaultUI,
   .toastui-editor-main {
-    font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif !important;
+    font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   }
+}
+
+.wiki-prose sup a,
+.wiki-prose a[data-footnote-ref],
+.wiki-prose a[id^='fnref'] {
+  color: #0745ad;
+  font-weight: 700;
+  font-size: 0.8em;
+  text-decoration: none;
+  padding: 0 1px;
+}
+
+.wiki-prose sup a:hover,
+.wiki-prose a[data-footnote-ref]:hover {
+  text-decoration: underline;
+}
+
+/* 2. 최하단 각주 영역 */
+.wiki-prose hr.footnotes-sep {
+  display: none;
+}
+
+.wiki-prose section.footnotes {
+  margin-top: 2rem;
+  margin-bottom: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #e2e8f0;
+  font-size: 0.875rem;
+  color: #334155;
+}
+
+/* 3. 하단 각주 리스트: [1], [2] 카운터 적용 */
+.wiki-prose section.footnotes ol.footnotes-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  counter-reset: footnote-counter;
+}
+
+.wiki-prose section.footnotes li {
+  counter-increment: footnote-counter;
+  margin: 0 0 6px 0;
+  padding: 0;
+  border: none;
+  line-height: 1.6;
+}
+
+.wiki-prose section.footnotes li::before {
+  content: '[' counter(footnote-counter) '] ';
+  color: #0745ad;
+  font-weight: 700;
+  font-size: 0.875rem;
+  margin-right: 4px;
+}
+
+.wiki-prose section.footnotes li p {
+  display: inline;
+  margin: 0;
+  padding: 0;
+}
+
+/* 4. 뒤로가기(↩) 화살표 아이콘 */
+.wiki-prose a.data-footnote-backref,
+.wiki-prose a[data-footnote-backref],
+.wiki-prose a.reversefootnote {
+  color: #2563eb;
+  text-decoration: none;
+  margin-left: 6px;
 }
