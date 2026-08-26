@@ -29,3 +29,18 @@ export function decodeSlug(slug: string[] | string | undefined): string[] {
   const arr = Array.isArray(slug) ? slug : [slug];
   return arr.map((s) => decodeURIComponent(s));
 }
+
+export function extractDescription(body: string, maxLength: number = 120): string {
+  if (!body) return '';
+
+  const plainText = body
+    .replace(/\[include\([^)]*\)\]/g, '')
+    .replace(/^#+\s+.*/gm, '')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/[*_`~]/g, '')
+    .replace(/<[^>]*>/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return plainText.length > maxLength ? plainText.substring(0, maxLength) + '...' : plainText;
+}
