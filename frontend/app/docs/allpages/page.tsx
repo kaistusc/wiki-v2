@@ -60,7 +60,7 @@ export default async function AllPagesList() {
 
       <div className="space-y-12">
         <section>
-          <h2 className="text-xl font-bold text-gray-800 border-b pb-2 mb-4 flex items-baseline gap-2">
+          <h2 className="text-xl font-bold text-gray-800 ">
             문서
             <span className="text-sm font-normal text-gray-500">({normalPages.length})</span>
           </h2>
