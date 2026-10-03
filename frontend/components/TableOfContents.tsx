@@ -15,7 +15,7 @@ export default function TableOfContents({ content }: { content: string }) {
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      const viewerContent = document.querySelector('.toastui-editor-contents');
+      const viewerContent = document.querySelector('.wiki-prose');
       if (!viewerContent) return;
 
       // h1 h2 h3 태그 가져오기
